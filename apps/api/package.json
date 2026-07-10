@@ -1,0 +1,35 @@
+{
+  "name": "@lingoleap/api",
+  "version": "0.1.0",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "dev": "ts-node src/main.ts",
+    "test": "vitest run",
+    "ingest": "ts-node src/cli/ingest.cli.ts"
+  },
+  "dependencies": {
+    "@lingoleap/core": "workspace:*",
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@supabase/supabase-js": "^2.48.0",
+    "dotenv": "^16.4.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.0.0",
+    "@swc/core": "^1.10.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "@types/supertest": "^6.0.0",
+    "msw": "^2.7.0",
+    "supertest": "^7.0.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.8.0",
+    "unplugin-swc": "^1.5.0",
+    "vitest": "^3.0.0"
+  }
+}
