@@ -4,12 +4,12 @@ function sleep(ms: number): Promise<void> {
 
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
-export async function fetchJson(
+async function fetchWithRetry(
   url: string,
-  init?: RequestInit,
-  retries = 3,
-  baseDelayMs = 500
-): Promise<unknown> {
+  init: RequestInit | undefined,
+  retries: number,
+  baseDelayMs: number
+): Promise<Response | null> {
   for (let attempt = 0; ; attempt++) {
     let response: Response;
     try {
@@ -21,9 +21,8 @@ export async function fetchJson(
       await sleep(baseDelayMs * 2 ** attempt);
       continue;
     }
-
     if (response.ok) {
-      return response.json();
+      return response;
     }
     if (!RETRYABLE_STATUS.has(response.status)) {
       return null;
@@ -33,4 +32,23 @@ export async function fetchJson(
     }
     await sleep(baseDelayMs * 2 ** attempt);
   }
+}
+
+export async function fetchJson(
+  url: string,
+  init?: RequestInit,
+  retries = 3,
+  baseDelayMs = 500
+): Promise<unknown> {
+  const response = await fetchWithRetry(url, init, retries, baseDelayMs);
+  return response ? response.json() : null;
+}
+
+export async function fetchText(
+  url: string,
+  retries = 3,
+  baseDelayMs = 500
+): Promise<string | null> {
+  const response = await fetchWithRetry(url, undefined, retries, baseDelayMs);
+  return response ? response.text() : null;
 }
