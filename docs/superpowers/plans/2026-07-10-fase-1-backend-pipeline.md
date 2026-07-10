@@ -1901,17 +1901,18 @@ Run: `pnpm --filter @lingoleap/api test` — Expected: FAIL.
 
 - [ ] **Step 2: Implementar `fetchText` y el provider**
 
-Añadir a `apps/api/src/infrastructure/http/fetch-json.ts`:
+Refactorizar `apps/api/src/infrastructure/http/fetch-json.ts` para que el bucle de reintentos viva en un helper privado compartido y `fetchJson`/`fetchText` solo elijan cómo parsear (reemplazar el cuerpo actual de `fetchJson` por la delegación; los tests existentes de `fetchJson` deben seguir en verde):
 ```ts
-export async function fetchText(
+async function fetchWithRetry(
   url: string,
-  retries = 3,
-  baseDelayMs = 500
-): Promise<string | null> {
+  init: RequestInit | undefined,
+  retries: number,
+  baseDelayMs: number
+): Promise<Response | null> {
   for (let attempt = 0; ; attempt++) {
     let response: Response;
     try {
-      response = await fetch(url);
+      response = await fetch(url, init);
     } catch (error) {
       if (attempt >= retries) {
         throw error;
@@ -1920,7 +1921,7 @@ export async function fetchText(
       continue;
     }
     if (response.ok) {
-      return response.text();
+      return response;
     }
     if (!RETRYABLE_STATUS.has(response.status)) {
       return null;
@@ -1930,6 +1931,25 @@ export async function fetchText(
     }
     await sleep(baseDelayMs * 2 ** attempt);
   }
+}
+
+export async function fetchJson(
+  url: string,
+  init?: RequestInit,
+  retries = 3,
+  baseDelayMs = 500
+): Promise<unknown> {
+  const response = await fetchWithRetry(url, init, retries, baseDelayMs);
+  return response ? response.json() : null;
+}
+
+export async function fetchText(
+  url: string,
+  retries = 3,
+  baseDelayMs = 500
+): Promise<string | null> {
+  const response = await fetchWithRetry(url, undefined, retries, baseDelayMs);
+  return response ? response.text() : null;
 }
 ```
 
