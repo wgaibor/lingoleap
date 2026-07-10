@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ImageSelectExercise, TranslateExercise } from '@lingoleap/core';
+import type { ImageSelectExercise, ListeningExercise, TranslateExercise } from '@lingoleap/core';
 import {
   chunkIntoLessons,
   composeMatchPairs,
@@ -66,6 +66,18 @@ describe('composeWordExercises', () => {
     for (const token of tokenize(translate.correctAnswer)) {
       expect(translate.wordBank).toContain(token);
     }
+    const lowerTokens = translate.wordBank.map((t) => t.toLowerCase());
+    expect(new Set(lowerTokens)).toHaveProperty('size', lowerTokens.length);
+    expect(translate.wordBank.length).toBeLessThanOrEqual(tokenize(translate.correctAnswer).length + 4);
+
+    const listening = exercises.find((e) => e.type === 'listening') as ListeningExercise;
+    const listeningTokens = tokenize(listening.text);
+    for (const token of listeningTokens) {
+      expect(listening.wordBank).toContain(token);
+    }
+    const listeningLowerTokens = listening.wordBank.map((t) => t.toLowerCase());
+    expect(new Set(listeningLowerTokens)).toHaveProperty('size', listeningLowerTokens.length);
+    expect(listening.wordBank.length).toBeLessThanOrEqual(listeningTokens.length + 4);
 
     const imageSelect = exercises.find((e) => e.type === 'image-select') as ImageSelectExercise;
     expect(imageSelect.prompt).toBe('agua');
@@ -86,6 +98,12 @@ describe('composeMatchPairs', () => {
     const result = composeMatchPairs(materials, seeded());
     expect(result).toHaveLength(2);
     expect(result[0].pairs).toHaveLength(5);
+
+    for (const pair of result[0].pairs) {
+      expect(pair.right).toBe(pair.left.replace('w', 't'));
+    }
+    const firstGroupLefts = result[0].pairs.map((p) => p.left).sort();
+    expect(firstGroupLefts).toEqual(['w0', 'w1', 'w2', 'w3', 'w4']);
   });
 });
 
