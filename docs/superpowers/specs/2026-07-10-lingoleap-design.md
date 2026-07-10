@@ -30,6 +30,7 @@ Aplicación de aprendizaje de idiomas estilo Duolingo (camino de lecciones, ejer
 | **Tatoeba API** (api.tatoeba.org) | Oraciones reales con traducción al español y audio de hablantes nativos | Gratis, CC |
 | **FrequencyWords / listas CEFR abiertas** (OpenSubtitles, Oxford-CEFR datasets) | Esqueleto del currículo: qué vocabulario enseñar y en qué orden por nivel | Gratis, open data |
 | **Pexels API** | Imágenes para ejercicios de vocabulario (200 req/hora) | Gratis |
+| **MyMemory API** | Traducción al español de palabras sueltas (para ejercicios de imagen y parejas); solo la usa el pipeline offline | Gratis (límite diario amplio, suficiente para la ingesta) |
 | **Web Speech API** (web) / **expo-speech** (móvil) | TTS en el dispositivo para texto sin audio nativo | Gratis, on-device |
 
 **Regla de arquitectura:** las apps cliente **nunca** llaman a las APIs externas de contenido. Un pipeline de ingesta las consume offline y persiste en Postgres; la API de NestJS sirve desde la BD. Así los rate limits no afectan a usuarios y la app sobrevive si una API externa muere.
