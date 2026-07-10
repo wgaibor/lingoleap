@@ -18,6 +18,8 @@ describe('TatoebaSentenceProvider', () => {
         const url = new URL(request.url);
         expect(url.searchParams.get('lang')).toBe('eng');
         expect(url.searchParams.get('q')).toBe('water');
+        expect(url.searchParams.get('sort')).toBe('words');
+        expect(url.searchParams.get('trans:lang')).toBe('spa');
         return HttpResponse.json(fixture);
       })
     );
