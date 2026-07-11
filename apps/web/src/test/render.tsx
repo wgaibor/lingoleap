@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, type RenderResult } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { MemoryRouter } from 'react-router-dom';
+import { AuthProvider } from '../features/auth/AuthProvider';
 
 export function renderWithProviders(
   ui: ReactElement,
@@ -16,7 +17,9 @@ export function renderWithProviders(
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+      <MemoryRouter initialEntries={[route]}>
+        <AuthProvider>{ui}</AuthProvider>
+      </MemoryRouter>
     </QueryClientProvider>
   );
 }
