@@ -1,10 +1,8 @@
 import { Route, Routes } from 'react-router-dom';
 import { LoginPage } from './features/auth/LoginPage';
 import { RequireAuth } from './features/auth/RequireAuth';
-
-function Home() {
-  return <p>Cursos</p>;
-}
+import { CoursesPage } from './features/course-path/CoursesPage';
+import { CoursePathPage } from './features/course-path/CoursePathPage';
 
 export default function App() {
   return (
@@ -16,7 +14,15 @@ export default function App() {
           path="/"
           element={
             <RequireAuth>
-              <Home />
+              <CoursesPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/course/:language/:level"
+          element={
+            <RequireAuth>
+              <CoursePathPage />
             </RequireAuth>
           }
         />
