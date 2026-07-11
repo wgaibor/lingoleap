@@ -13,7 +13,7 @@ export function ListeningExercise({
 
   function handlePlay() {
     if (exercise.audioUrl) {
-      new Audio(exercise.audioUrl).play();
+      new Audio(exercise.audioUrl).play().catch(() => speak(exercise.text));
     } else {
       speak(exercise.text);
     }
@@ -28,7 +28,6 @@ export function ListeningExercise({
       <button
         type="button"
         className="button button-primary"
-        aria-label="Escuchar"
         onClick={handlePlay}
         style={{ display: 'block', marginBottom: 'var(--space-md)', fontSize: '1.5rem' }}
       >
