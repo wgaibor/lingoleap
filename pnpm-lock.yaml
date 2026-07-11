@@ -97,6 +97,12 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@22.20.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))
 
+  packages/tokens:
+    devDependencies:
+      typescript:
+        specifier: ^5.8.0
+        version: 5.9.3
+
 packages:
 
   '@borewit/text-codec@0.2.2':
