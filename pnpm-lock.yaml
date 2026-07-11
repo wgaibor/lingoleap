@@ -88,6 +88,22 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@22.20.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))
 
+  packages/api-client:
+    dependencies:
+      '@lingoleap/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      msw:
+        specifier: ^2.0.0
+        version: 2.15.0(@types/node@22.20.1)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.8.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@22.20.1)(msw@2.15.0(@types/node@22.20.1)(typescript@5.9.3))
+
   packages/core:
     devDependencies:
       typescript:
