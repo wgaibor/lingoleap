@@ -61,6 +61,6 @@ import { TatoebaSentenceProvider } from './providers/tatoeba/tatoeba-sentence.pr
       ]
     }
   ],
-  exports: [IngestContentUseCase, COURSE_REPOSITORY]
+  exports: [IngestContentUseCase, COURSE_REPOSITORY, SUPABASE_CLIENT]
 })
 export class IngestModule {}
