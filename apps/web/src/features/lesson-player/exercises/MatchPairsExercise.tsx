@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MatchPairsExercise as MatchPairsModel } from '@lingoleap/core';
-import type { ExerciseComponentProps } from './ImageSelectExercise';
+import type { ExerciseComponentProps } from './types';
 
 export function MatchPairsExercise({ exercise, onResolve }: ExerciseComponentProps<MatchPairsModel>) {
   const [matched, setMatched] = useState<Set<string>>(new Set());
@@ -8,6 +8,7 @@ export function MatchPairsExercise({ exercise, onResolve }: ExerciseComponentPro
   const [selectedRight, setSelectedRight] = useState<string | null>(null);
   const [wrongPair, setWrongPair] = useState<{ left: string; right: string } | null>(null);
   const resolvedRef = useRef(false);
+  const timeoutRef = useRef<number | null>(null);
 
   const rightColumn = [...exercise.pairs].sort((a, b) => a.right.localeCompare(b.right));
 
@@ -18,6 +19,12 @@ export function MatchPairsExercise({ exercise, onResolve }: ExerciseComponentPro
     }
   }, [matched, exercise.pairs, onResolve]);
 
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
   function evaluate(left: string, right: string) {
     const isPair = exercise.pairs.some((pair) => pair.left === left && pair.right === right);
     if (isPair) {
@@ -26,10 +33,12 @@ export function MatchPairsExercise({ exercise, onResolve }: ExerciseComponentPro
       setSelectedRight(null);
     } else {
       setWrongPair({ left, right });
-      window.setTimeout(() => {
+      if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = window.setTimeout(() => {
         setWrongPair(null);
         setSelectedLeft(null);
         setSelectedRight(null);
+        timeoutRef.current = null;
       }, 400);
     }
   }

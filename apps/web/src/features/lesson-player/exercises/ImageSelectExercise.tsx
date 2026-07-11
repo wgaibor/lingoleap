@@ -1,12 +1,6 @@
 import { useState } from 'react';
 import type { ImageSelectExercise as ImageSelectModel } from '@lingoleap/core';
-
-/** Contrato común de todos los componentes de ejercicio (reutilizado por Translate/Listening). */
-export interface ExerciseComponentProps<E> {
-  exercise: E;
-  /** Se llama UNA vez cuando el usuario resuelve el ejercicio. */
-  onResolve: (correct: boolean) => void;
-}
+import type { ExerciseComponentProps } from './types';
 
 export function ImageSelectExercise({ exercise, onResolve }: ExerciseComponentProps<ImageSelectModel>) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
