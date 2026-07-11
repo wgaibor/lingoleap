@@ -67,16 +67,11 @@ export function LoginPage() {
           role="tab"
           aria-selected={mode === 'login'}
           onClick={() => switchMode('login')}
+          className="button-secondary"
           style={{
             flex: 1,
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: 'var(--space-sm)',
             background: mode === 'login' ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: mode === 'login' ? 'var(--color-surface)' : 'var(--color-text)',
-            fontFamily: 'inherit',
-            fontWeight: 700,
-            cursor: 'pointer'
+            color: mode === 'login' ? 'var(--color-surface)' : 'var(--color-text)'
           }}
         >
           Entrar
@@ -86,16 +81,11 @@ export function LoginPage() {
           role="tab"
           aria-selected={mode === 'register'}
           onClick={() => switchMode('register')}
+          className="button-secondary"
           style={{
             flex: 1,
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: 'var(--space-sm)',
             background: mode === 'register' ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: mode === 'register' ? 'var(--color-surface)' : 'var(--color-text)',
-            fontFamily: 'inherit',
-            fontWeight: 700,
-            cursor: 'pointer'
+            color: mode === 'register' ? 'var(--color-surface)' : 'var(--color-text)'
           }}
         >
           Crear cuenta
@@ -150,17 +140,11 @@ export function LoginPage() {
       <button
         type="button"
         onClick={handleGoogle}
+        className="button-secondary"
         style={{
           width: '100%',
           marginTop: 'var(--space-md)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          padding: 'var(--space-sm) var(--space-md)',
-          background: 'var(--color-surface)',
-          color: 'var(--color-text)',
-          fontFamily: 'inherit',
-          fontWeight: 700,
-          cursor: 'pointer'
+          padding: 'var(--space-sm) var(--space-md)'
         }}
       >
         Continuar con Google
