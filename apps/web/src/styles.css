@@ -1,0 +1,44 @@
+@import '@lingoleap/tokens/tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  color: var(--color-text);
+  background: var(--color-background);
+}
+
+a {
+  color: inherit;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-lg);
+}
+
+.button {
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.button-primary {
+  background: var(--color-primary);
+  color: #ffffff;
+}
