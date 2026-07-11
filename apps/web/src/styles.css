@@ -40,5 +40,5 @@ a {
 
 .button-primary {
   background: var(--color-primary);
-  color: #ffffff;
+  color: var(--color-surface);
 }
