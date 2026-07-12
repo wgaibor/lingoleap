@@ -80,7 +80,7 @@ export function LessonPlayerPage() {
       queryClient.invalidateQueries({ queryKey: ['progress'] });
     }
   });
-  const { mutate: completeLessonMutate, isError: completeLessonFailed } = completeMutation;
+  const { mutate: completeLessonMutate, isError: completeLessonFailed, isPending: completeLessonPending } = completeMutation;
 
   // Ownership guard: el estado 'finished' solo cuenta como el de ESTA lección
   // si state.lesson.id coincide con lessonId. Sin esto, el estado 'finished'
@@ -123,6 +123,7 @@ export function LessonPlayerPage() {
         onBack={() => navigate(-1)}
         saveError={completeLessonFailed}
         onRetry={handleRetryComplete}
+        retryPending={completeLessonPending}
       />
     );
   }

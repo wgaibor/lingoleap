@@ -124,8 +124,22 @@ describe('LessonPlayerPage', () => {
     expect(await screen.findByText('No pudimos guardar tu progreso.')).toBeInTheDocument();
     expect(completeLesson).toHaveBeenCalledTimes(1);
 
-    completeLesson.mockResolvedValueOnce(undefined);
+    // Regresión: el botón "Reintentar" no se deshabilitaba mientras la mutación
+    // de reintento estaba en curso, así que un doble clic rápido disparaba dos
+    // POST (el upsert del servidor es idempotente, pero es un comportamiento de
+    // cliente descuidado). Se controla manualmente cuándo resuelve la promesa
+    // para poder observar el estado "en curso" del botón antes de que termine.
+    let resolveRetry!: () => void;
+    completeLesson.mockImplementationOnce(
+      () => new Promise<void>((resolve) => { resolveRetry = resolve; })
+    );
     await userEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Reintentar' })).toBeDisabled();
+    });
+
+    resolveRetry();
 
     await waitFor(() => {
       expect(screen.queryByText('No pudimos guardar tu progreso.')).not.toBeInTheDocument();
