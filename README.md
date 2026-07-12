@@ -13,25 +13,39 @@ Render y Vercel).
 
 Monorepo TypeScript (pnpm workspaces + Turborepo). El backend aplica **arquitectura
 hexagonal** (puertos y adaptadores): el dominio no conoce frameworks ni servicios externos;
-las dependencias siempre apuntan hacia adentro.
+las dependencias siempre apuntan hacia adentro. El frontend web es **React idiomático**
+(TanStack Query para estado de servidor, zustand para estado de sesión) que reutiliza la
+lógica de dominio compartida en `packages/core` — la misma que usará la futura app móvil.
 
 ```
 lingoleap/
 ├── apps/
-│   └── api/                  Backend NestJS 11 — arquitectura hexagonal
+│   ├── api/                   Backend NestJS 11 — arquitectura hexagonal
+│   │   └── src/
+│   │       ├── domain/            Entidades, factorías con invariantes, errores semánticos
+│   │       ├── application/       Casos de uso + puertos (interfaces). TypeScript puro, sin NestJS
+│   │       │   ├── ports/             CourseRepository, SentenceProvider, ImageProvider…
+│   │       │   └── use-cases/         ingest-content, get-course, get-lesson, list-courses…
+│   │       ├── infrastructure/    Adaptadores que implementan los puertos
+│   │       │   ├── providers/         Tatoeba, MyMemory, Pexels, FrequencyWords
+│   │       │   ├── auth/              SupabaseAuthVerifier (verifica tokens de Supabase Auth)
+│   │       │   └── persistence/       Supabase (Postgres)
+│   │       └── presentation/      Controllers REST + guard de auth + filtro de errores
+│   └── web/                   Frontend React 18 + Vite — auth, camino del curso, reproductor
 │       └── src/
-│           ├── domain/           Entidades, factorías con invariantes, errores semánticos
-│           ├── application/      Casos de uso + puertos (interfaces). TypeScript puro, sin NestJS
-│           │   ├── ports/            CourseRepository, SentenceProvider, ImageProvider…
-│           │   └── use-cases/        ingest-content, get-course, get-lesson, list-courses
-│           ├── infrastructure/   Adaptadores que implementan los puertos
-│           │   ├── providers/        Tatoeba, MyMemory, Pexels, FrequencyWords
-│           │   └── persistence/      Supabase (Postgres)
-│           └── presentation/     Controllers REST + filtro de errores de dominio
+│           ├── app/                Providers (Query, Router), cliente Supabase, cliente API
+│           ├── features/
+│           │   ├── auth/               AuthProvider/useAuth, LoginPage, RequireAuth
+│           │   ├── course-path/        Queries de curso/progreso, camino de lecciones
+│           │   └── lesson-player/      sessionStore (zustand), reproductor, 4 tipos de ejercicio
+│           └── shared/              Hook useSpeech (TTS del navegador)
 ├── packages/
-│   └── core/                 Tipos y lógica de dominio compartidos (los usarán web y mobile)
-├── supabase/migrations/      Esquema SQL (courses → units → lessons → exercises, con RLS)
-└── docs/                     Spec de diseño, plan de implementación y bitácora
+│   ├── core/                  Tipos y lógica de dominio compartidos (desbloqueo progresivo,
+│   │                          validación de respuestas, máquina de estados de sesión)
+│   ├── tokens/                Design tokens (colores, radios, espaciados) — única fuente de estilos
+│   └── api-client/            SDK tipado del backend (maneja token y errores semánticos)
+├── supabase/migrations/       Esquema SQL (courses → units → lessons → exercises, progreso, con RLS)
+└── docs/                      Spec de diseño, planes de implementación y bitácora
 ```
 
 ### Pipeline de contenido (el corazón del proyecto)
@@ -64,6 +78,8 @@ FrequencyWords ──► MyMemory ──► Tatoeba ──► Pexels ──► C
 | `GET /courses` | Lista de cursos disponibles |
 | `GET /courses/:language/:level` | Camino completo del curso (unidades → lecciones) |
 | `GET /lessons/:id` | Lección con sus ejercicios |
+| `POST /progress/lessons/:lessonId/complete` | Marca una lección completada *(requiere `Authorization: Bearer <token>` de Supabase)* |
+| `GET /progress/lessons` | Ids de lecciones completadas del usuario autenticado *(requiere token)* |
 
 Los errores de dominio se exponen con códigos semánticos:
 `{ "code": "COURSE_NOT_FOUND", "message": "Curso no encontrado: it C2" }` (HTTP 404).
@@ -74,8 +90,8 @@ Requisitos: Node ≥ 22, pnpm ≥ 11.
 
 ```bash
 pnpm install
-pnpm build        # compila core + api (Turborepo)
-pnpm test         # 39 tests (Vitest + msw + supertest)
+pnpm build        # compila todos los paquetes y apps (Turborepo)
+pnpm test         # 78 tests (Vitest + msw + supertest + Testing Library)
 pnpm lint
 
 # Backend (requiere apps/api/.env — ver apps/api/.env.example)
@@ -83,18 +99,37 @@ pnpm --filter @lingoleap/api dev
 
 # Ingesta de contenido (ejemplo: inglés nivel A1, 40 palabras)
 pnpm --filter @lingoleap/api ingest --lang en --level A1 --limit 40
+
+# Web (requiere apps/web/.env.local — ver abajo)
+pnpm --filter @lingoleap/web dev
 ```
 
-Para la base de datos: crear un proyecto gratuito en Supabase y ejecutar
-`supabase/migrations/0001_content.sql` en su SQL Editor.
+Para la base de datos: crear un proyecto gratuito en Supabase y ejecutar en orden, en su SQL
+Editor, `supabase/migrations/0001_content.sql` y `supabase/migrations/0002_progress.sql`.
+
+### Variables de entorno de la web
+
+`apps/web/.env.local` (ver `apps/web/.env.example`):
+
+```bash
+VITE_API_URL=http://localhost:3000
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+```
+
+La `ANON_KEY` es pública **por diseño**: es la clave que usa cualquier cliente del navegador
+para hablar con Supabase, y la seguridad real la dan las políticas de **Row-Level Security**
+(RLS) en Postgres, no el secreto de la clave — por eso el backend usa una clave distinta
+(`service_role`) que nunca se expone al cliente.
 
 ## Testing
 
 | Capa | Estrategia |
 |---|---|
-| Dominio y casos de uso | Unit tests puros con fakes de los puertos (sin red, sin BD) |
-| Adaptadores externos | Tests de integración con respuestas HTTP simuladas ([msw](https://mswjs.io/)) y fixtures capturados de las APIs reales |
+| Dominio y casos de uso (`packages/core`, `apps/api`) | Unit tests puros con fakes de los puertos (sin red, sin BD) |
+| Adaptadores externos (`apps/api`, `@lingoleap/api-client`) | Tests de integración con respuestas HTTP simuladas ([msw](https://mswjs.io/)) y fixtures capturados de las APIs reales |
 | API REST | Tests end-to-end con supertest sobre la app NestJS real |
+| Componentes web (`apps/web`) | [Testing Library](https://testing-library.com/) + `user-event` sobre comportamiento visible (roles ARIA, texto), nunca implementación interna |
 | Desarrollo | TDD: cada función nació de un test que primero falló (RED → GREEN) |
 
 ## CI/CD
@@ -105,7 +140,7 @@ congelado → lint → build → tests. El badge de arriba refleja el estado de 
 ## Roadmap
 
 - [x] **Fase 1** — Monorepo, backend hexagonal, pipeline de ingesta, API REST *(completa)*
-- [ ] **Fase 2** — Web en React + Vite: auth, camino del curso, reproductor de lecciones
+- [x] **Fase 2** — Web en React + Vite: auth, camino del curso, reproductor de lecciones *(completa)*
 - [ ] **Fase 3** — Gamificación: XP, rachas, corazones, ligas semanales, logros
 - [ ] **Fase 4** — App móvil con React Native + Expo (reusa `packages/core`)
 - [ ] **Fase 5** — Portugués e italiano (solo correr el pipeline) + despliegue
@@ -115,3 +150,4 @@ congelado → lint → build → tests. El badge de arriba refleja el estado de 
 - [Bitácora de desarrollo](docs/BITACORA.md) — decisiones, arquitectura explicada y guía de entrevista
 - [Spec de diseño](docs/superpowers/specs/2026-07-10-lingoleap-design.md)
 - [Plan de implementación Fase 1](docs/superpowers/plans/2026-07-10-fase-1-backend-pipeline.md)
+- [Plan de implementación Fase 2](docs/superpowers/plans/2026-07-10-fase-2-web-react.md)

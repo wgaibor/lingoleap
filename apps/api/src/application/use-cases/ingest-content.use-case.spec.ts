@@ -79,6 +79,21 @@ describe('IngestContentUseCase', () => {
     expect(repo.saved).toHaveLength(1);
   });
 
+  it('salta la palabra si el provider lanza un error (ej. HTTP 500) y sigue con las demás', async () => {
+    const { useCase, repo } = makeUseCase({
+      sentence: async (word) => {
+        if (word === 'coffee') {
+          throw new Error('HTTP 500 en https://api.tatoeba.org/... tras 4 intentos');
+        }
+        return { text: `I like ${word}.`, translationEs: `Me gusta es-${word}.`, audioUrl: null };
+      }
+    });
+    const report = await useCase.execute({ language: 'en', level: 'A1', wordLimit: 6 });
+    expect(report.skippedWords).toEqual(['coffee']);
+    expect(report.materialsBuilt).toBe(5);
+    expect(repo.saved).toHaveLength(1);
+  });
+
   it('lanza InvalidContentError si no se pudo construir ningún material', async () => {
     const { useCase } = makeUseCase({ translate: async () => null });
     await expect(useCase.execute({ language: 'en', level: 'A1', wordLimit: 6 })).rejects.toThrow(
