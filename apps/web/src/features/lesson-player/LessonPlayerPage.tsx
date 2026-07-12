@@ -111,6 +111,19 @@ export function LessonPlayerPage() {
 
   const exercise = state.lesson.exercises[state.index];
 
+  // startSession deja la fase en 'answering' aunque la lección venga sin
+  // ejercicios; sin esta guardia, renderExercise rompería con undefined.
+  if (!exercise) {
+    return (
+      <div className="container">
+        <p>Esta lección no tiene ejercicios.</p>
+        <button type="button" className="button button-primary" onClick={() => navigate(-1)}>
+          Volver al curso
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="container">
       <div
