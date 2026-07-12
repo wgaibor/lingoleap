@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../app/supabase';
 
 type Mode = 'login' | 'register';
@@ -10,6 +11,7 @@ function mapAuthError(message: string | undefined): string {
 }
 
 export function LoginPage() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,13 +33,21 @@ export function LoginPage() {
     try {
       if (mode === 'login') {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        if (signInError) setError(mapAuthError(signInError.message));
+        if (signInError) {
+          setError(mapAuthError(signInError.message));
+        } else {
+          navigate('/', { replace: true });
+        }
       } else {
         const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
         if (signUpError) {
           setError(mapAuthError(signUpError.message));
-        } else if (!data?.session) {
-          setInfo('Revisa tu correo para confirmar la cuenta');
+        } else if (data?.session) {
+          navigate('/', { replace: true });
+        } else {
+          setInfo('Cuenta creada. Revisa tu correo para confirmarla.');
+          setEmail('');
+          setPassword('');
         }
       }
     } finally {
@@ -155,7 +165,11 @@ export function LoginPage() {
           {error}
         </p>
       )}
-      {info && <p style={{ color: 'var(--color-text-muted)', marginTop: 'var(--space-md)' }}>{info}</p>}
+      {info && (
+        <p role="status" style={{ color: 'var(--color-primary)', marginTop: 'var(--space-md)' }}>
+          {info}
+        </p>
+      )}
     </div>
   );
 }
