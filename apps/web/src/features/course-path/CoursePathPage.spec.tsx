@@ -36,4 +36,10 @@ describe('CoursePathPage', () => {
     expect(l2).toHaveAttribute('data-status', 'unlocked');
     expect(screen.getByRole('link', { name: /Lección 2/ })).toHaveAttribute('href', '/lesson/l2?lang=en');
   });
+
+  it('muestra el resumen de progreso del curso con porcentaje redondeado', async () => {
+    renderWithProviders(<CoursePathPage />, { route: '/course/en/A1', path: '/course/:language/:level' });
+
+    expect(await screen.findByText('1 de 2 lecciones completadas · 50%')).toBeInTheDocument();
+  });
 });

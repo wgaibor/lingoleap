@@ -65,6 +65,30 @@ a {
   text-align: center;
 }
 
+.progress-bar {
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+  height: 8px;
+}
+
+.progress-bar-fill {
+  background: var(--color-primary);
+  height: 100%;
+  border-radius: var(--radius-pill);
+}
+
+.course-progress-header {
+  margin-bottom: var(--space-xl);
+}
+
+.course-progress-text {
+  margin: var(--space-sm) 0 0;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
 .course-path-unit {
   margin-bottom: var(--space-xl);
 }
@@ -96,6 +120,7 @@ a {
 }
 
 .lesson-node-circle {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -105,6 +130,25 @@ a {
   font-weight: 700;
   font-size: 1.5rem;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Línea conectora hacia la lección anterior: da la sensación de un camino
+   continuo entre los círculos de lección. Se ancla al círculo (no al nodo
+   completo) y sube hasta cubrir el espacio de la etiqueta y el gap anterior. */
+.lesson-node-with-connector .lesson-node-circle::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: calc(var(--space-lg) + var(--space-sm) + 20px);
+  background: var(--color-border);
+  z-index: -1;
+}
+
+.lesson-node-with-connector.lesson-node-connector-active .lesson-node-circle::before {
+  background: var(--color-primary);
 }
 
 .lesson-node-circle-unlocked,
@@ -143,6 +187,17 @@ a.lesson-node:active .lesson-node-circle-completed {
   box-shadow: 0 2px 0 var(--color-primary-dark);
 }
 
+.exercise-counter {
+  margin: 0 0 var(--space-sm);
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.completion-screen-phrase {
+  color: var(--color-text-muted);
+}
+
 .feedback-bar {
   position: sticky;
   bottom: 0;
@@ -175,6 +230,11 @@ a.lesson-node:active .lesson-node-circle-completed {
 
 .feedback-bar-answer {
   margin: 0;
+}
+
+.feedback-bar-phrase {
+  margin: var(--space-xs) 0 0;
+  font-size: 0.875rem;
 }
 
 .button-continue {

@@ -7,15 +7,30 @@ export interface LessonNodeProps {
   lessonId: string;
   language: LearningLanguage;
   position: number;
+  /** Muestra la línea conectora hacia la lección anterior (falso para la primera de la unidad). */
+  showConnector?: boolean;
+  /** Colorea la línea conectora en verde: el tramo lleva a una lección completada o desbloqueada. */
+  connectorActive?: boolean;
 }
 
-export function LessonNode({ title, status, lessonId, language, position }: LessonNodeProps) {
+export function LessonNode({
+  title,
+  status,
+  lessonId,
+  language,
+  position,
+  showConnector = false,
+  connectorActive = false
+}: LessonNodeProps) {
   const testId = 'lesson-' + lessonId;
+  const connectorClass = showConnector
+    ? ' lesson-node-with-connector' + (connectorActive ? ' lesson-node-connector-active' : '')
+    : '';
 
   if (status === 'locked') {
     return (
       <div
-        className="lesson-node lesson-node-locked"
+        className={'lesson-node lesson-node-locked' + connectorClass}
         data-testid={testId}
         data-status={status}
         aria-disabled="true"
@@ -34,7 +49,7 @@ export function LessonNode({ title, status, lessonId, language, position }: Less
   return (
     <Link
       to={'/lesson/' + lessonId + '?lang=' + language}
-      className="lesson-node"
+      className={'lesson-node' + connectorClass}
       data-testid={testId}
       data-status={status}
       title={title}

@@ -10,6 +10,7 @@ export function CompletionScreen({ correctCount, wrongCount, onBack, saveError, 
   return (
     <div className="container">
       <h2>¡Lección completada!</h2>
+      <p className="completion-screen-phrase">¡Gran trabajo! Cada lección te acerca más.</p>
       <p>Aciertos: {correctCount}</p>
       <p>Errores: {wrongCount}</p>
       {saveError && (

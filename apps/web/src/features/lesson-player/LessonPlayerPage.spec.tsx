@@ -41,6 +41,7 @@ describe('LessonPlayerPage', () => {
     renderWithProviders(<LessonPlayerPage />, { route: '/lesson/l1?lang=en', path: '/lesson/:lessonId' });
 
     // Ejercicio 1: parejas
+    expect(await screen.findByText('Ejercicio 1 de 2')).toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: 'water' }));
     await userEvent.click(screen.getByRole('button', { name: 'agua' }));
     expect(await screen.findByText('¡Correcto!')).toBeInTheDocument();

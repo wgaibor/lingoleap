@@ -144,22 +144,11 @@ export function LessonPlayerPage() {
 
   return (
     <div className="container">
-      <div
-        style={{
-          background: 'var(--color-border)',
-          borderRadius: 'var(--radius-pill)',
-          height: 8,
-          marginBottom: 'var(--space-lg)'
-        }}
-      >
-        <div
-          style={{
-            background: 'var(--color-primary)',
-            width: `${progressRatio(state) * 100}%`,
-            height: '100%',
-            borderRadius: 'var(--radius-pill)'
-          }}
-        />
+      <p className="exercise-counter">
+        Ejercicio {state.index + 1} de {state.lesson.exercises.length}
+      </p>
+      <div className="progress-bar">
+        <div className="progress-bar-fill" style={{ width: `${progressRatio(state) * 100}%` }} />
       </div>
 
       {renderExercise(exercise, language, resolve)}
@@ -168,6 +157,7 @@ export function LessonPlayerPage() {
         <FeedbackBar
           correct={state.lastAnswerCorrect}
           correctAnswer={state.lastAnswerCorrect ? undefined : correctAnswerFor(exercise)}
+          exerciseIndex={state.index}
           onContinue={next}
         />
       )}
