@@ -124,6 +124,174 @@ De la revisión final de código, aceptada para Fase 1 con justificación:
 
 ---
 
+## Fase 2 — Web en React (auth, camino del curso, reproductor de lecciones) (2026-07-11) ✅
+
+### El problema a resolver
+
+Construir el primer cliente sobre el backend hexagonal de la Fase 1: una web donde alguien
+se registra, ve su camino de lecciones con desbloqueo progresivo, y completa una lección de
+principio a fin (4 tipos de ejercicio, con corrección y texto a voz) sin que el frontend
+duplique lógica de dominio que ya vive en `packages/core` — porque esa misma lógica la va a
+reutilizar la futura app móvil (Fase 4).
+
+### Decisiones técnicas y su porqué
+
+| Decisión | Alternativas consideradas | Por qué se eligió |
+|---|---|---|
+| **zustand** para el estado de sesión de una lección en curso (fase, índice, aciertos) | `useReducer` local; Context API | El estado (¿qué ejercicio toca?, ¿en feedback o respondiendo?) vive fuera del árbol de componentes, sobrevive a re-renders del reproductor y no necesita Provider/boilerplate para un solo store |
+| **TanStack Query** para el estado de servidor (cursos, progreso, lección) | `fetch` en `useEffect` + `useState` | Cache y deduplicación automática; invalidación declarativa (`invalidateQueries(['progress'])` al completar una lección) — separa con nitidez "datos que vienen del servidor" (Query) de "estado de interfaz" (zustand), en vez de mezclarlos en un solo `useState` |
+| **Lógica de desbloqueo progresivo** (`computePathStatus`) **y máquina de estados de la sesión** (`startSession`/`submitAnswer`/`advance`) como funciones puras en `packages/core` | Escribirlas directamente en los componentes de `apps/web` | Son funciones puras (input → output, sin React ni DOM) testeadas con Vitest sin renderizar nada; la futura app móvil las importa tal cual, sin reescribir la regla de negocio |
+| **`@lingoleap/api-client`** como SDK tipado propio | Llamar `fetch` directo desde cada feature | Un solo lugar centraliza el header `Authorization: Bearer`, y traduce errores HTTP a `ApiError` con el mismo código semántico que ya expone el backend (`COURSE_NOT_FOUND`, etc.); reutilizable por mobile |
+| **`@lingoleap/tokens`** como paquete de design tokens (colores, radios, espaciados) | Definir CSS/valores en cada app por separado | Web y la futura mobile comparten la misma paleta; y se volvió la regla dura del proyecto — "los colores solo salen de tokens, nunca hex a mano" (violada una vez y corregida en review, problema #4 abajo) |
+| **TTS del navegador** (`Web Speech API`, hook `useSpeech`) para pronunciar y para el ejercicio de escucha | Servir archivos de audio pregrabados | Ya decidido en Fase 1 (Tatoeba no expone audio); acá se implementa el lado cliente: mapear idioma → BCP-47 (`en-US`, `pt-BR`, `it-IT`) y bajar la velocidad a 0.95 para aprendizaje |
+| **Selección del banco de palabras por índice**, no por string elegido | Guardar el string de la ficha tocada | Las oraciones reales tienen tokens repetidos ("the… the…"); un array de índices sobre `wordBank` identifica sin ambigüedad *cuál* ficha física se usó, aunque el texto se repita |
+| **Supabase Auth** (email/contraseña + Google OAuth) para login/registro | Sistema de auth propio | Ya incluido en el plan gratuito de Supabase usado desde Fase 1; `user_progress` ya tenía RLS por `auth.uid()`; evita construir registro, hash de contraseñas y recuperación desde cero |
+
+### División de responsabilidades en el frontend, explicada con este código
+
+**Regla: el dominio no sabe de React.** `packages/core` (`computePathStatus`,
+`startSession/submitAnswer/advance`, `normalizeAnswer/isTokenAnswerCorrect`) son funciones
+puras sin imports de React — se testean llamándolas directo, sin `render()`.
+
+- **Estado de servidor** (`features/course-path/queries.ts`): hooks `useCourses`,
+  `useCourse`, `useProgress` sobre TanStack Query. Su única responsabilidad es traer datos
+  del backend vía `api` (el SDK de `@lingoleap/api-client`) y cachearlos.
+- **Estado de sesión** (`features/lesson-player/sessionStore.ts`): un store de zustand que
+  es un envoltorio delgado sobre las funciones puras de `packages/core` — el store no
+  calcula nada, solo guarda el resultado de llamarlas.
+- **Estado de auth** (`features/auth/AuthProvider.tsx` + `useAuth` + `RequireAuth`): un
+  Context de React sobre la sesión de Supabase; `RequireAuth` es el único componente que
+  decide si redirigir a `/login`.
+- **Componentes de ejercicio** (`features/lesson-player/exercises/`): reciben props tipadas
+  por un contrato compartido `ExerciseComponentProps<E>` (`exercises/types.ts`) y solo llaman
+  `onResolve(correct)` — no conocen la sesión, ni la API, ni el store. `LessonPlayerPage.tsx`
+  es el único que conecta ejercicio ↔ store ↔ API.
+
+### Cómo se desarrolló: TDD
+
+Mismo flujo que en Fase 1 — test primero (falla, RED), implementación mínima (GREEN), commit.
+La fase sumó **39 tests nuevos** (39 → 78 en todo el monorepo, en 29 archivos de test):
+
+- **`packages/core`**: 10 tests — funciones puras, sin mocks (`answer-validation`,
+  `path-status`, `lesson-session`).
+- **`packages/api-client`**: 4 tests — con **msw** simulando el backend (token adjunto,
+  errores semánticos).
+- **`apps/api`**: 47 tests (39 de Fase 1 + 8 nuevos: `AuthVerifier`, progreso, guard, filtro
+  de stopwords).
+- **`apps/web`**: 17 tests — **Testing Library** con `@testing-library/react` +
+  `user-event` + `jsdom`; se testea *comportamiento visible* (roles ARIA, texto en pantalla),
+  nunca implementación interna. El test de `LessonPlayerPage` es el más valioso: simula con
+  `userEvent` una lección completa de punta a punta (responde 3 tipos de ejercicio distintos,
+  ve el feedback, avanza, llega a la pantalla de finalización) contra un `api` mockeado —
+  es la prueba que más confianza da de que las piezas (store + queries + componentes de
+  ejercicio) encajan.
+
+### Problemas reales encontrados (oro para entrevistas)
+
+1. **`vi.mock` + hoisting de Vitest → `ReferenceError: Cannot access '<fixture>' before
+   initialization`**: Vitest eleva (hoiza) las llamadas a `vi.mock()` por encima de las
+   declaraciones `const` del módulo; si el factory del mock lee una variable declarada más
+   abajo en el archivo, revienta en tiempo de ejecución antes de que corra ni un test. Pasó
+   dos veces (`CoursePathPage.spec.tsx` y, de nuevo, `LessonPlayerPage.spec.tsx`) porque el
+   patrón de fixture-arriba-del-mock es natural de escribir. Solución: `vi.hoisted(() => ({
+   fixture }))`, el mecanismo oficial de Vitest para declarar valores que el mock necesita
+   antes de que el módulo termine de evaluarse. Lección: *entender el orden de ejecución de
+   un test runner no es opcional cuando se usa module mocking*.
+2. **`pnpm build` rompía solo en `apps/web`, con un error que apuntaba al paquete
+   equivocado**: `"LingoApiClient" is not exported by ".../api-client/dist/index.js"` al
+   construir con Vite. Causa real: pnpm resuelve paquetes del workspace por symlink a su
+   ruta real (`packages/core`, `packages/api-client`), *fuera* de `node_modules`; el
+   `commonjsOptions.include` por defecto de Vite (`/node_modules/`) no cubre esa ruta, así
+   que el plugin de interop CJS→ESM nunca tocaba esos `dist/index.js` (compilados como
+   CommonJS porque `tsconfig.base.json` es compartido con el backend NestJS). Rollup solo
+   reporta el primer binding roto que encuentra, lo que hizo parecer que solo fallaba
+   `api-client` cuando en realidad `core` tenía el mismo problema. Se descartó
+   `resolve.preserveSymlinks: true` (rompe dependencias transitivas hoisted por pnpm) y se
+   descartó tocar `tsconfig.base.json` (afectaría al build del backend). Fix acotado a
+   `apps/web/vite.config.ts`: `commonjsOptions.include: [/packages\/core/,
+   /packages\/api-client/, /node_modules/]`.
+3. **Los tests de `LoginPage` se contaminaban entre sí**: con `globals: false` en
+   `vitest.config.ts`, `@testing-library/react` no registra su auto-cleanup entre tests
+   (ese registro depende de los hooks globales de Vitest/Jest). El segundo test de la suite
+   heredaba el DOM montado por el primero y `getByRole('button', { name: 'Entrar' })› fallaba
+   por "multiple elements found". Solución: `afterEach(() => cleanup())` explícito en
+   `test/setup.ts`. Lección: *`globals: false` es más explícito, pero apaga magia que uno
+   asume gratis — hay que revisar qué depende de esos globals*.
+4. **Un `#ffffff` hardcodeado se coló en el primer CSS y lo atrapó el review**: el botón
+   primario tenía `color: #ffffff` en vez de `var(--color-surface)`, violando la restricción
+   del proyecto de que los colores solo salen de `@lingoleap/tokens`. El bug no rompía nada
+   visualmente (el token vale lo mismo), pero rompía la garantía de que un cambio de tema
+   futuro (dark mode, rebrand) solo toca `tokens.css`. Corregido en review antes de mergear.
+5. **Un `aria-label` le ganaba al texto visible como nombre accesible del botón**: el botón
+   grande de Listening tenía tanto el texto "🔊 Escucha y escribe lo que oíste" como
+   `aria-label="Escuchar"` — y en el algoritmo de *accessible name* del navegador, el
+   `aria-label` siempre gana sobre el contenido de texto, así que un lector de pantalla
+   anunciaba solo "Escuchar", no la instrucción completa. El `aria-label` es correcto en el
+   botón de Translate (que es *solo* un ícono 🔊 sin texto), pero era un error copiarlo al
+   botón que ya tenía texto propio. Lección: *`aria-label` no es "una etiqueta extra", es un
+   reemplazo total — solo se usa cuando no hay texto visible que sirva de nombre*.
+6. **`new Audio(url).play()` es una promesa, y nadie la esperaba**: el ejercicio de escucha
+   reproduce un archivo de audio si `exercise.audioUrl` existe; `.play()` devuelve una
+   promesa que los navegadores rechazan si las políticas de autoplay lo bloquean (o si la
+   URL falla). Sin `.catch()`, ese rechazo queda como una promesa no manejada — en el mejor
+   caso un warning en consola, en el peor un audio que nunca suena y ningún indicio de por
+   qué. Fix: `.play().catch(() => speak(exercise.text))` — si el audio pregrabado falla, cae
+   al TTS del navegador como plan B, coherente con la decisión de Fase 1 de que el TTS es la
+   fuente de audio de respaldo.
+7. **`setTimeout` sin limpiar en `MatchPairsExercise`**: el flash rojo de 400ms al fallar una
+   pareja se armaba con `window.setTimeout`, pero si el usuario navegaba fuera del ejercicio
+   antes de que el timeout disparara, React tiraba el warning clásico de "no se puede
+   actualizar el estado de un componente desmontado" — un memory leak silencioso en producción.
+   Fix: guardar el id en un `useRef` y limpiarlo tanto antes de programar uno nuevo como en el
+   cleanup de un `useEffect` vacío (`return () => clearTimeout(ref.current)`).
+8. **El reproductor de lecciones no tenía guarda para una lección sin ejercicios**: el review
+   final encontró que `startSession` deja la fase en `'answering'` sin importar cuántos
+   ejercicios tenga la lección, así que `renderExercise` indexaba `exercises[0]` sobre un
+   array vacío y explotaba con `TypeError: Cannot read properties of undefined`. No lo
+   cubría el test dado en el brief porque ese test usa una lección con ejercicios reales.
+   Fix: guarda explícita que muestra "Esta lección no tiene ejercicios" con un botón de
+   vuelta, más un test que fuerza `exercises: []` y confirma que `completeLesson` nunca se
+   llama en ese caso. Lección: *un test que pasa con el "camino feliz" no prueba que el
+   camino vacío esté cubierto — hay que pedirlo explícitamente*.
+
+### Deuda técnica registrada (consciente y priorizada)
+
+- `AuthGuard.verifyToken` no atrapa errores de red hacia Supabase Auth: si Supabase está caído,
+  el guard lanza una excepción no controlada (500) en vez de responder 401. Aceptable para MVP
+  porque Supabase Auth es el mismo proveedor que ya sostiene toda la persistencia.
+- `normalizeAnswer` no aplica `Unicode NFC` antes de comparar: dos formas de escribir el mismo
+  acento (compuesto vs. precompuesto) podrían no matchear. No se disparó en los tests porque
+  los fixtures usan una sola forma; **antes de exponer el input a usuarios reales** hay que
+  agregar `.normalize('NFC')`.
+- La distinción visual entre lección "desbloqueada" y "completada" en el camino del curso es
+  débil (solo cambia la opacidad) — deuda de diseño, no de lógica: `computePathStatus` ya
+  devuelve el estado correcto, falta el tratamiento visual.
+- El guard de `completedRef` que evita reenviar `completeLesson` dos veces al cambiar de
+  `:lessonId` en la misma ruta montada quedó sin test directo (se encontró y corrigió por
+  auto-revisión, no por TDD) — vale agregarle cobertura cuando exista navegación "siguiente
+  lección" que mantenga `LessonPlayerPage` montado entre lecciones.
+- `saveCourse` (Fase 1) sigue sin ser transaccional — deuda heredada, aún no abordada.
+- **Smoke real end-to-end pendiente** (Task 17 del plan): todo lo de arriba está verificado
+  con tests automatizados y build limpio, pero falta correr la app contra un backend real
+  desplegado (cuenta Supabase real, navegador real) antes de dar la fase por cerrada de
+  verdad.
+
+> Los problemas 1 y 2 de esta fase son los más "de infraestructura de build/test" que hasta
+> ahora aparecieron en el proyecto — buena señal de que la lógica de dominio (Fase 1 y
+> `packages/core`) es sólida y lo que falla es el cableado entre herramientas, no las reglas
+> de negocio.
+
+### Números de la fase
+
+- 20 commits · 76 archivos · +3.747/−44 líneas · 39 tests nuevos (39 → 78 en el monorepo,
+  29 archivos de test) · CI verde
+- 15 tareas de plan ejecutadas con TDD (Task 16 es esta entrada de documentación), cada una
+  con revisión de código independiente antes de integrarse; 5 de ellas (Tasks 9, 10, 13, 14,
+  15) tuvieron un commit adicional (`fix(web): …` en cuatro casos, `refactor(web): …` en uno)
+  por hallazgos de esa revisión (ver problemas #3–8 arriba)
+
+---
+
 ## Guía rápida de entrevista
 
 **"Háblame de un proyecto tuyo"** — guion de 60 segundos:
@@ -135,7 +303,11 @@ De la revisión final de código, aceptada para Fase 1 con justificación:
 > el dominio es TypeScript puro y las integraciones externas son adaptadores intercambiables
 > detrás de interfaces, lo que me dejó testear todo con fakes — 39 tests escritos con TDD.
 > El contenido se ingesta offline a Postgres (Supabase), así los rate limits de las APIs
-> gratuitas nunca tocan al usuario. Todo corre en CI con GitHub Actions.
+> gratuitas nunca tocan al usuario. Todo corre en CI con GitHub Actions. Encima construí el
+> cliente web en React: TanStack Query para el estado de servidor, zustand para el estado de
+> la sesión de una lección, y la lógica de negocio (desbloqueo progresivo, validación de
+> respuestas) vive como funciones puras en un paquete compartido — lista para reusarse cuando
+> haga la versión móvil con React Native.
 
 **Preguntas probables y dónde apoyarte:**
 
@@ -154,6 +326,37 @@ De la revisión final de código, aceptada para Fase 1 con justificación:
   si el pipeline no está en verde. Mi primer push falló por un conflicto de versiones de pnpm
   y ahí mismo lo arreglé — para eso está."
 
+**Temas de React (Fase 2):**
+
+- *¿Para qué usaste `useEffect` y `useRef` en este proyecto, en concreto?* → "`useEffect` en
+  `LessonPlayerPage` arranca la sesión (`start(lesson)`) una vez que llega la lección de
+  TanStack Query, y en `MatchPairsExercise` limpio un `setTimeout` al desmontar para no
+  actualizar estado de un componente que ya no existe — sin ese cleanup, React tira el warning
+  clásico de memory leak. `useRef` lo usé para guardas que no deben disparar un re-render:
+  `completedRef` evita que `completeLesson` se llame dos veces, `resolvedRef` en MatchPairs
+  evita que `onResolve` dispare más de una vez. La regla que aprendí: si el valor no debe
+  causar un render cuando cambia, es `useRef`, no `useState`."
+- *¿Por qué separaste TanStack Query de tu estado local (zustand)?* → "Porque son datos de
+  naturaleza distinta: el curso y el progreso *viven en el servidor* — pueden quedar viejos,
+  hay que revalidarlos, otro dispositivo puede cambiarlos — y ahí Query brilla (cache,
+  invalidación, refetch). La fase actual del ejercicio que estoy respondiendo *no existe en
+  ningún servidor*, es puramente de esta pestaña — ahí uso zustand. Mezclarlos en un solo
+  `useState` es la forma más común en la que he visto bugs de estado desincronizado."
+- *¿Cómo testeas componentes de React?* → "Con Testing Library: `render` + `screen.getByRole` +
+  `userEvent`, nunca `getElementById` ni tocar el estado interno — si el test sobrevive a un
+  refactor que no cambia el comportamiento visible, está bien escrito. El test que más orgullo
+  me da es el de `LessonPlayerPage`: con `userEvent` simulo una lección completa — contestar
+  varios tipos de ejercicio, ver el feedback, avanzar, llegar a la pantalla final — contra un
+  `api` mockeado. Si ese test pasa, sé que el store, las queries y los componentes de ejercicio
+  encajan de verdad, no en aislamiento."
+- *¿Cómo manejaste la autenticación?* → "`AuthProvider` envuelve la app con la sesión de
+  Supabase Auth (email/contraseña + Google OAuth) vía Context; `useAuth` la expone; `RequireAuth`
+  es el único componente que decide si redirige a `/login` cuando no hay sesión. El resto de la
+  app ni sabe que la auth existe — solo usa `useAuth()` si necesita el usuario."
+- *¿Qué harías diferente en el frontend?* → usa la sección de deuda de la Fase 2: falta
+  `normalize('NFC')` antes de comparar respuestas de usuarios reales, y el guard de
+  `completedRef` no tiene test directo — se encontró por auto-revisión, no por TDD.
+
 ---
 
-*Próxima entrada: Fase 2 — frontend web en React.*
+*Próxima entrada: Fase 3 — gamificación (XP, rachas, corazones, ligas semanales, logros).*
