@@ -65,6 +65,10 @@ a {
   text-align: center;
 }
 
+.lesson-player-header {
+  margin-bottom: var(--space-xl);
+}
+
 .progress-bar {
   background: var(--color-border);
   border-radius: var(--radius-pill);

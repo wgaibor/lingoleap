@@ -145,11 +145,13 @@ export function LessonPlayerPage() {
 
   return (
     <div className="container">
-      <p className="exercise-counter">
-        Ejercicio {state.index + 1} de {state.lesson.exercises.length}
-      </p>
-      <div className="progress-bar">
-        <div className="progress-bar-fill" style={{ width: `${progressRatio(state) * 100}%` }} />
+      <div className="lesson-player-header">
+        <p className="exercise-counter">
+          Ejercicio {state.index + 1} de {state.lesson.exercises.length}
+        </p>
+        <div className="progress-bar">
+          <div className="progress-bar-fill" style={{ width: `${progressRatio(state) * 100}%` }} />
+        </div>
       </div>
 
       {renderExercise(exercise, language, resolve)}
