@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import type { LearningLanguage, LessonStatus } from '@lingoleap/core';
 
@@ -7,38 +6,25 @@ export interface LessonNodeProps {
   status: LessonStatus;
   lessonId: string;
   language: LearningLanguage;
+  position: number;
 }
 
-const bubbleStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  width: 56,
-  height: 56,
-  borderRadius: 'var(--radius-pill)',
-  fontWeight: 700,
-  textAlign: 'center'
-};
-
-export function LessonNode({ title, status, lessonId, language }: LessonNodeProps) {
+export function LessonNode({ title, status, lessonId, language, position }: LessonNodeProps) {
   const testId = 'lesson-' + lessonId;
 
   if (status === 'locked') {
     return (
       <div
+        className="lesson-node lesson-node-locked"
         data-testid={testId}
         data-status={status}
         aria-disabled="true"
         title={title}
-        style={{
-          ...bubbleStyle,
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          color: 'var(--color-text-muted)',
-          cursor: 'not-allowed'
-        }}
       >
-        {title}
+        <span className="lesson-node-circle lesson-node-circle-locked" aria-hidden="true">
+          🔒
+        </span>
+        <span className="lesson-node-label">{title}</span>
       </div>
     );
   }
@@ -48,19 +34,22 @@ export function LessonNode({ title, status, lessonId, language }: LessonNodeProp
   return (
     <Link
       to={'/lesson/' + lessonId + '?lang=' + language}
+      className="lesson-node"
       data-testid={testId}
       data-status={status}
       title={title}
-      aria-label={isCompleted ? title + ' (completada)' : title}
-      style={{
-        ...bubbleStyle,
-        background: 'var(--color-primary)',
-        opacity: isCompleted ? 1 : 0.85,
-        color: 'var(--color-surface)',
-        textDecoration: 'none'
-      }}
+      aria-label={isCompleted ? title + ' (completada)' : undefined}
     >
-      {isCompleted ? '✓' : title}
+      <span
+        className={
+          'lesson-node-circle ' +
+          (isCompleted ? 'lesson-node-circle-completed' : 'lesson-node-circle-unlocked')
+        }
+        aria-hidden="true"
+      >
+        {isCompleted ? '✓' : position}
+      </span>
+      <span className="lesson-node-label">{title}</span>
     </Link>
   );
 }

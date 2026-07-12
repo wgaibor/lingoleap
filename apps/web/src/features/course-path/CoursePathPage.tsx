@@ -31,25 +31,28 @@ export function CoursePathPage() {
 
   return (
     <div className="container">
-      <h2>{course.title}</h2>
-      {units.map((unit) => (
-        <section key={unit.id} style={{ marginBottom: 'var(--space-lg)' }}>
-          <h3>{unit.title}</h3>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-md)' }}>
-            {[...unit.lessons]
-              .sort((a, b) => a.position - b.position)
-              .map((lesson) => (
-                <LessonNode
-                  key={lesson.id}
-                  title={lesson.title}
-                  status={status[lesson.id]}
-                  lessonId={lesson.id}
-                  language={course.language}
-                />
-              ))}
-          </div>
-        </section>
-      ))}
+      <div className="course-path">
+        <h2 className="course-path-title">{course.title}</h2>
+        {units.map((unit) => (
+          <section key={unit.id} className="course-path-unit">
+            <h3 className="course-path-unit-title">{unit.title}</h3>
+            <div className="lesson-path">
+              {[...unit.lessons]
+                .sort((a, b) => a.position - b.position)
+                .map((lesson) => (
+                  <LessonNode
+                    key={lesson.id}
+                    title={lesson.title}
+                    status={status[lesson.id]}
+                    lessonId={lesson.id}
+                    language={course.language}
+                    position={lesson.position}
+                  />
+                ))}
+            </div>
+          </section>
+        ))}
+      </div>
     </div>
   );
 }
