@@ -15,6 +15,9 @@ const STOPWORDS_PATH: Record<LearningLanguage, string> = {
 };
 
 const WORD_PATTERN = /^[a-záéíóúàèìòùâêôãõçñüæœ']{2,}$/i;
+// Solo tokens puramente alfabéticos: descarta clíticos con apóstrofo ('s, don't),
+// números y cualquier otro token con puntuación que rompa el pipeline de ingesta.
+const ALPHA_ONLY_PATTERN = /^\p{L}+$/u;
 
 export class FrequencyWordsVocabularyProvider implements VocabularyProvider {
   private readonly cache = new Map<LearningLanguage, string[]>();
@@ -48,7 +51,7 @@ export class FrequencyWordsVocabularyProvider implements VocabularyProvider {
     const words = text
       .split('\n')
       .map((line) => line.split(' ')[0]?.trim().toLowerCase() ?? '')
-      .filter((word) => WORD_PATTERN.test(word));
+      .filter((word) => WORD_PATTERN.test(word) && ALPHA_ONLY_PATTERN.test(word));
     this.cache.set(language, words);
     return words;
   }

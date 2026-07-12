@@ -32,6 +32,27 @@ describe('FrequencyWordsVocabularyProvider', () => {
     expect(downloads).toBe(1);
   });
 
+  it('descarta tokens no puramente alfabéticos como \'s, don\'t y números', async () => {
+    const fileWithJunk = [
+      "'s 95",
+      "don't 92",
+      '123 91',
+      'the 100',
+      'of 90',
+      'water 70',
+      'milk 60',
+      'a 50',
+      'bread 40'
+    ].join('\n');
+    server.use(
+      http.get(`${BASE}/en/en_50k.txt`, () => HttpResponse.text(fileWithJunk)),
+      http.get(`${SW_BASE}/stopwords-en/master/stopwords-en.txt`, () => HttpResponse.text('the\nof\na'))
+    );
+    const provider = new FrequencyWordsVocabularyProvider(BASE, SW_BASE);
+    const words = await provider.topWords('en', { start: 1, end: 9 }, 9);
+    expect(words).toEqual(['water', 'milk', 'bread']);
+  });
+
   it('si las stopwords no se pueden descargar, continúa sin filtro', async () => {
     server.use(
       http.get(`${BASE}/en/en_50k.txt`, () => HttpResponse.text(FILE)),

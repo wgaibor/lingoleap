@@ -59,18 +59,25 @@ export class IngestContentUseCase {
     const skippedWords: string[] = [];
 
     for (const word of words) {
-      const translationEs = await this.deps.translations.translateToSpanish(word, language);
-      if (translationEs === null) {
+      try {
+        const translationEs = await this.deps.translations.translateToSpanish(word, language);
+        if (translationEs === null) {
+          skippedWords.push(word);
+          continue;
+        }
+        const sentence = await this.deps.sentences.findExampleSentence(word, language);
+        if (sentence === null) {
+          skippedWords.push(word);
+          continue;
+        }
+        const imageUrl = await this.deps.images.findImageUrl(word);
+        materials.push({ word, translationEs, sentence, imageUrl });
+      } catch (error) {
+        // Un fallo de un provider para UNA palabra (ej. HTTP 500 tras reintentos) no debe
+        // abortar la ingesta completa: la palabra se salta y se sigue con las demás.
+        console.warn(`No se pudo construir material para "${word}"; se salta la palabra`, error);
         skippedWords.push(word);
-        continue;
       }
-      const sentence = await this.deps.sentences.findExampleSentence(word, language);
-      if (sentence === null) {
-        skippedWords.push(word);
-        continue;
-      }
-      const imageUrl = await this.deps.images.findImageUrl(word);
-      materials.push({ word, translationEs, sentence, imageUrl });
     }
 
     if (materials.length === 0) {
