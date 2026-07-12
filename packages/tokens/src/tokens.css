@@ -19,4 +19,5 @@
   --space-lg: 24px;
   --space-xl: 32px;
   --font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+  --shadow-sm: 0 2px 4px rgb(0 0 0 / 0.2);
 }

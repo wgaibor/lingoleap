@@ -13,14 +13,7 @@ export function ImageSelectExercise({ exercise, onResolve }: ExerciseComponentPr
   return (
     <div>
       <p style={{ fontWeight: 700, marginBottom: 'var(--space-md)' }}>¿Cuál es «{exercise.prompt}»?</p>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(2, 1fr)',
-          gap: 'var(--space-sm)',
-          marginBottom: 'var(--space-md)'
-        }}
-      >
+      <div className="image-select-options">
         {exercise.options.map((option, index) => {
           const isSelected = selectedIndex === index;
           return (
@@ -40,11 +33,7 @@ export function ImageSelectExercise({ exercise, onResolve }: ExerciseComponentPr
               }}
             >
               {option.imageUrl && (
-                <img
-                  src={option.imageUrl}
-                  alt={option.label}
-                  style={{ width: '100%', height: 96, objectFit: 'cover', borderRadius: 'var(--radius-sm)' }}
-                />
+                <img src={option.imageUrl} alt={option.label} className="image-select-option-image" />
               )}
               <span>{option.label}</span>
             </button>
