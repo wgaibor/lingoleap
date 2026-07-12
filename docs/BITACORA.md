@@ -147,6 +147,11 @@ reutilizar la futura app móvil (Fase 4).
 | **Selección del banco de palabras por índice**, no por string elegido | Guardar el string de la ficha tocada | Las oraciones reales tienen tokens repetidos ("the… the…"); un array de índices sobre `wordBank` identifica sin ambigüedad *cuál* ficha física se usó, aunque el texto se repita |
 | **Supabase Auth** (email/contraseña + Google OAuth) para login/registro | Sistema de auth propio | Ya incluido en el plan gratuito de Supabase usado desde Fase 1; `user_progress` ya tenía RLS por `auth.uid()`; evita construir registro, hash de contraseñas y recuperación desde cero |
 
+> El botón "Continuar con Google" está implementado en código (`LoginPage.handleGoogle`), pero
+> configurarlo de verdad requiere un OAuth Client ID en Google Cloud Console — durante el smoke
+> real (Task 17) el usuario decidió posponerlo como feature futura y probar el smoke completo
+> solo con email/contraseña, que sí quedó verificado de punta a punta.
+
 ### División de responsabilidades en el frontend, explicada con este código
 
 **Regla: el dominio no sabe de React.** `packages/core` (`computePathStatus`,
@@ -263,32 +268,125 @@ La fase sumó **39 tests nuevos** (39 → 78 en todo el monorepo, en 29 archivos
   acento (compuesto vs. precompuesto) podrían no matchear. No se disparó en los tests porque
   los fixtures usan una sola forma; **antes de exponer el input a usuarios reales** hay que
   agregar `.normalize('NFC')`.
-- La distinción visual entre lección "desbloqueada" y "completada" en el camino del curso es
-  débil (solo cambia la opacidad) — deuda de diseño, no de lógica: `computePathStatus` ya
-  devuelve el estado correcto, falta el tratamiento visual.
+- ~~La distinción visual entre lección "desbloqueada" y "completada" en el camino del curso es
+  débil (solo cambia la opacidad)~~ — **resuelto durante el smoke** (fix 590d427): ahora cada
+  círculo muestra ✓ (completada), el número de posición (desbloqueada) o 🔒 (bloqueada), con
+  colores distintos por estado.
 - El guard de `completedRef` que evita reenviar `completeLesson` dos veces al cambiar de
   `:lessonId` en la misma ruta montada quedó sin test directo (se encontró y corrigió por
   auto-revisión, no por TDD) — vale agregarle cobertura cuando exista navegación "siguiente
   lección" que mantenga `LessonPlayerPage` montado entre lecciones.
-- `saveCourse` (Fase 1) sigue sin ser transaccional — deuda heredada, aún no abordada.
-- **Smoke real end-to-end pendiente** (Task 17 del plan): todo lo de arriba está verificado
-  con tests automatizados y build limpio, pero falta correr la app contra un backend real
-  desplegado (cuenta Supabase real, navegador real) antes de dar la fase por cerrada de
-  verdad.
+- `saveCourse` (Fase 1) sigue sin ser transaccional, y el smoke real reveló una consecuencia
+  concreta: re-ingestar reemplaza las lecciones con UUIDs nuevos y el `on delete cascade` de
+  `user_progress` borra el progreso de usuarios existentes (detalle completo en "Idempotencia"
+  más abajo).
+- La migración `supabase/migrations/0002_progress.sql` no es re-ejecutable (`create policy` sin
+  guard) — decisión aceptada: se corre una sola vez por proyecto Supabase.
+- El botón "Reintentar" de `CompletionScreen` no deshabilitaba el botón mientras la mutación de
+  reintento estaba en curso (hallazgo de la revisión final de rama, commit 7e9d8b9) —
+  **arreglado en el cierre de la Fase 2** (ver "Idempotencia" más abajo).
+- **Smoke real end-to-end** (Task 17 del plan): ~~pendiente~~ **completado el 12 de julio de
+  2026** — ver la sección dedicada más abajo.
 
 > Los problemas 1 y 2 de esta fase son los más "de infraestructura de build/test" que hasta
 > ahora aparecieron en el proyecto — buena señal de que la lógica de dominio (Fase 1 y
 > `packages/core`) es sólida y lo que falla es el cableado entre herramientas, no las reglas
 > de negocio.
 
+### Smoke real end-to-end (Task 17)
+
+El plan reservaba la Task 17 para un recorrido manual real, en el navegador, con una cuenta de
+usuario real — la única verificación que ningún test automatizado puede reemplazar. Se hizo el
+12 de julio de 2026, después de cerrar en verde las 15 tareas de código y la revisión final de
+la rama (commit 7e9d8b9).
+
+**El recorrido**: registro con email, login, curso "Inglés A1", lecciones 1 y 2 completadas de
+punta a punta, progreso persistido en `user_progress` (verificado directo en la base de datos),
+desbloqueo progresivo funcionando, y sesión cerrada y reabierta con el progreso intacto.
+
+**Lo que encontró — 7 problemas reales que ningún test automatizado había atrapado:**
+
+1. **(624bc9f)** El token `'s` (clítico posesivo inglés) de la lista de frecuencia rompía la
+   ingesta contra Tatoeba (HTTP 500) y, peor, el fallo de UNA palabra abortaba TODO el
+   pipeline — violando el principio de resiliencia que el spec de Fase 1 ya había fijado ("la
+   ingesta nunca aborta completa"). Fix: filtro `/^\p{L}+$/u` para el token, más un `try/catch`
+   por palabra en el caso de uso que ahora la salta y la reporta en `skippedWords`.
+2. **(a41ae4c)** En modo `dev` de Vite, los paquetes CJS del workspace se servían sin
+   transformar: `"LingoApiClient" is not exported by ...`. Los tests pasaban y `pnpm build`
+   pasaba — el modo dev nunca se había ejercitado hasta este smoke. Fix: `optimizeDeps.include`
+   en `vite.config.ts`.
+3. **(a18fac7)** El registro no daba ningún feedback visual y el login no navegaba a la app —
+   no existía un solo `navigate()` en todo el flujo de auth.
+4. **(590d427)** El camino del curso se veía apretado e ilegible — rediseño tipo roadmap
+   vertical.
+5. **(b91b85f)** El botón "Continuar" verde sobre la barra de feedback verde era casi
+   invisible — hallazgo de UX puro del usuario durante el smoke.
+6. **(f6d45ed)** Sin porcentaje de progreso del curso, sin contador de ejercicio dentro de la
+   lección, sin ningún refuerzo motivacional — se agregaron los tres.
+7. **(3ae1b9e)** Las imágenes de Pexels del ejercicio "elige la imagen" se veían estiradas y
+   aplastadas por un marco demasiado ancho; de paso, la revisión de código atrapó una sombra
+   con un color crudo (`rgba(...)`) que debía salir de un token.
+
+**El incidente que validó dos decisiones de arquitectura**: a mitad del smoke, la API de
+Tatoeba se cayó por completo (500 hasta en su propia web) — una caída externa real, no
+simulada. Confirmó en producción dos decisiones de la Fase 1: la arquitectura de "BD como
+caché" (la app siguió funcionando perfectamente sin que Tatoeba respondiera, porque el
+contenido ya estaba ingerido en Supabase) y el invariante de dominio de `createCourse` (un
+curso sin unidades lanza `InvalidContentError`, así que una ingesta 100% fallida no pudo dejar
+guardado un curso vacío). La re-ingesta con el filtro de stopwords quedó pendiente de que
+Tatoeba se recupere.
+
+**La lección para entrevistas**: los tests unitarios/integración estaban en 28/28 verde en
+`apps/web` (y verdes en todo el monorepo), `pnpm build` y `pnpm lint` limpios, y aun así el
+smoke encontró 7 problemas reales. Esa es la diferencia entre "los tests pasan" y "el producto
+funciona": los tests automatizados verifican comportamiento que alguien pensó en escribir; el
+smoke expone todo lo que nadie pensó en testear porque nadie lo había visto correr de verdad.
+
+### Idempotencia: dónde está y dónde falta
+
+Revisar el bug del botón "Reintentar" sin `disabled` (ver Deuda técnica) llevó a hacer una
+pasada explícita por el resto del código preguntando "¿qué pasa si esta operación se ejecuta
+dos veces?" — la pregunta central detrás de la idempotencia: **poder repetir una operación sin
+que el resultado cambie más allá de la primera vez**. Importa en cualquier sistema con
+reintentos de red, que es exactamente el caso de este proyecto: un POST que falla y el cliente
+(o el usuario, a mano) lo reintenta.
+
+**Ya idempotente:**
+
+| Dónde | Por qué |
+|---|---|
+| Upsert de progreso (`SupabaseProgressRepository`, `.upsert(..., { onConflict: 'user_id,lesson_id', ignoreDuplicates: true })`) | Completar la misma lección dos veces no duplica filas — el servidor es seguro ante reintentos aunque el cliente falle |
+| `completedRef` + guard de pertenencia en `LessonPlayerPage` | Una sola llamada a `completeLesson` por lección, incluso si el efecto se re-evalúa o la ruta se reutiliza entre lecciones |
+| `submitAnswer` / `advance` (`packages/core/src/logic/lesson-session.ts`) | Son no-ops fuera de su fase (`if (state.phase !== 'answering') return state`, `if (state.phase !== 'feedback') return state`) — un doble clic en "Comprobar" o "Continuar" no rompe la máquina de estados |
+| La ingesta de contenido (`IngestContentUseCase` + `saveCourse`) | Re-ejecutable por diseño: `saveCourse` borra el curso existente (por `language`+`level`) antes de insertar el nuevo, así que correr el CLI dos veces con el mismo idioma/nivel reemplaza el curso en vez de duplicarlo |
+
+**Falta (deuda consciente, plan de hardening antes de desplegar):**
+
+- `saveCourse` no es transaccional (`delete` + 4 `insert` secuenciales). Si falla a mitad de
+  camino, el curso queda en estado parcial. Ticket ya registrado desde la Fase 1: una función
+  RPC de Postgres (`replace_course`) que haga todo en una sola transacción.
+- Re-ingestar un curso genera lecciones con UUIDs nuevos (la tabla los autogenera), y
+  `user_progress.lesson_id` referencia `lessons(id) on delete cascade` — así que una
+  re-ingesta **borra el progreso de los usuarios que ya habían completado lecciones de ese
+  curso**. Aceptable en desarrollo (donde corrió este smoke); bloqueante antes de producción:
+  hace falta IDs estables entre re-ingestas o una migración explícita de progreso.
+- La migración `supabase/migrations/0002_progress.sql` no es re-ejecutable: sus `create policy`
+  no llevan guard. Decisión aceptada desde la Task 1: se corre una sola vez por proyecto
+  Supabase.
+- El botón "Reintentar" de `CompletionScreen` no tenía `disabled` mientras la mutación de
+  reintento estaba en curso — un doble clic rápido podía disparar dos POST. El servidor ya era
+  idempotente (ver tabla de arriba), así que no rompía nada, pero era un descuido de cliente.
+  **Arreglado en el cierre de esta fase.**
+
 ### Números de la fase
 
-- 20 commits · 76 archivos · +3.747/−44 líneas · 39 tests nuevos (39 → 78 en el monorepo,
-  29 archivos de test) · CI verde
-- 15 tareas de plan ejecutadas con TDD (Task 16 es esta entrada de documentación), cada una
-  con revisión de código independiente antes de integrarse; 5 de ellas (Tasks 9, 10, 13, 14,
-  15) tuvieron un commit adicional (`fix(web): …` en cuatro casos, `refactor(web): …` en uno)
-  por hallazgos de esa revisión (ver problemas #3–8 arriba)
+- 31 commits · 84 archivos · +4.658/−91 líneas · 91 tests en el monorepo (39 al cierre de la
+  Fase 1 → 91) · CI verde
+- 17 tareas de plan ejecutadas (16 con TDD; Task 16 es la entrada de documentación y Task 17 es
+  el smoke manual), cada una con revisión de código independiente antes de integrarse; 5 de
+  ellas (Tasks 9, 10, 13, 14, 15) tuvieron un commit adicional por hallazgos de esa revisión
+  (ver problemas #3–8 arriba), y el smoke (Task 17) sumó 7 commits de fix/mejora en vivo (ver
+  arriba)
 
 ---
 
