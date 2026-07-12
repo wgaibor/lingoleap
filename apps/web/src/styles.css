@@ -142,3 +142,63 @@ a.lesson-node:active .lesson-node-circle-completed {
   transform: translateY(2px);
   box-shadow: 0 2px 0 var(--color-primary-dark);
 }
+
+.feedback-bar {
+  position: sticky;
+  bottom: 0;
+  margin-top: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-md);
+  color: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.feedback-bar-correct {
+  background: var(--color-primary);
+}
+
+.feedback-bar-incorrect {
+  background: var(--color-danger);
+}
+
+.feedback-bar-message {
+  color: var(--color-surface);
+}
+
+.feedback-bar-title {
+  font-weight: 700;
+  margin: 0;
+}
+
+.feedback-bar-answer {
+  margin: 0;
+}
+
+.button-continue {
+  background: var(--color-surface);
+  border-radius: var(--radius-pill);
+  padding: var(--space-sm) var(--space-xl);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, filter 0.15s ease;
+  flex-shrink: 0;
+}
+
+.button-continue:hover {
+  transform: scale(1.04);
+  filter: brightness(1.05);
+}
+
+.button-continue:active {
+  transform: scale(0.98);
+}
+
+.button-continue-correct {
+  color: var(--color-primary-dark);
+}
+
+.button-continue-incorrect {
+  color: var(--color-danger);
+}
