@@ -55,6 +55,12 @@ export function LessonPlayerPage() {
   const start = useSessionStore((s) => s.start);
   const resolve = useSessionStore((s) => s.resolve);
   const next = useSessionStore((s) => s.next);
+  const reset = useSessionStore((s) => s.reset);
+
+  // El store de sesión es un singleton global de zustand: si esta página se
+  // desmonta (navegación a otra lección) sin limpiar el estado, la próxima
+  // lección puede montarse viendo la fase 'finished' de la lección anterior.
+  useEffect(() => () => reset(), [reset]);
 
   const lessonQuery = useQuery({
     queryKey: ['lesson', lessonId],
@@ -74,14 +80,24 @@ export function LessonPlayerPage() {
       queryClient.invalidateQueries({ queryKey: ['progress'] });
     }
   });
-  const { mutate: completeLessonMutate } = completeMutation;
+  const { mutate: completeLessonMutate, isError: completeLessonFailed } = completeMutation;
+
+  // Ownership guard: el estado 'finished' solo cuenta como el de ESTA lección
+  // si state.lesson.id coincide con lessonId. Sin esto, el estado 'finished'
+  // que quedó en el store al terminar una lección anterior dispararía la
+  // mutación de completado (y el render final) para la lección recién abierta.
+  const belongsToCurrentLesson = state?.lesson.id === lessonId;
 
   useEffect(() => {
-    if (state?.phase === 'finished' && !completedRef.current && lessonId) {
+    if (state?.phase === 'finished' && belongsToCurrentLesson && !completedRef.current && lessonId) {
       completedRef.current = true;
       completeLessonMutate(lessonId);
     }
-  }, [state?.phase, lessonId, completeLessonMutate]);
+  }, [state?.phase, belongsToCurrentLesson, lessonId, completeLessonMutate]);
+
+  function handleRetryComplete() {
+    if (lessonId) completeLessonMutate(lessonId);
+  }
 
   if (lessonQuery.isError) {
     return (
@@ -91,7 +107,7 @@ export function LessonPlayerPage() {
     );
   }
 
-  if (lessonQuery.isPending || !state) {
+  if (lessonQuery.isPending || !state || !belongsToCurrentLesson) {
     return (
       <div className="container">
         <p>Cargando…</p>
@@ -105,6 +121,8 @@ export function LessonPlayerPage() {
         correctCount={state.correctCount}
         wrongCount={state.wrongCount}
         onBack={() => navigate(-1)}
+        saveError={completeLessonFailed}
+        onRetry={handleRetryComplete}
       />
     );
   }
