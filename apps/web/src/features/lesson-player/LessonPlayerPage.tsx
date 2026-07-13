@@ -124,6 +124,27 @@ export function LessonPlayerPage() {
     );
   }
 
+  // Sin este guard, un fallo de stats/progreso dejaba "Cargando…" para siempre:
+  // isPending pasa a false pero data queda undefined, así que ni el bloqueo ni
+  // start() llegan a correr, aun con corazones disponibles.
+  if (statsQuery.isError || progressQuery.isError) {
+    return (
+      <div className="container">
+        <p role="alert">No pudimos cargar tus estadísticas.</p>
+        <button
+          type="button"
+          className="button button-primary"
+          onClick={() => {
+            if (statsQuery.isError) void statsQuery.refetch();
+            if (progressQuery.isError) void progressQuery.refetch();
+          }}
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
   if (lessonQuery.isPending || statsQuery.isPending || progressQuery.isPending) {
     return (
       <div className="container">

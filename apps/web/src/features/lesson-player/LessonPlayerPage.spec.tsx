@@ -182,4 +182,22 @@ describe('LessonPlayerPage', () => {
     renderWithProviders(<LessonPlayerPage />, { route: '/lesson/l1?lang=en', path: '/lesson/:lessonId' });
     expect(await screen.findByRole('button', { name: 'water' })).toBeInTheDocument();
   });
+
+  it('muestra un error con reintento si fallan las estadísticas', async () => {
+    // Regresión: al introducir la dependencia de stats/progreso en el player,
+    // un fallo de getStats dejaba "Cargando…" para siempre (isPending pasa a
+    // false pero data queda undefined: ni el bloqueo ni start() llegan a correr),
+    // bloqueando la lección incluso con corazones disponibles.
+    getStats.mockRejectedValueOnce(new Error('network'));
+
+    renderWithProviders(<LessonPlayerPage />, { route: '/lesson/l1?lang=en', path: '/lesson/:lessonId' });
+
+    expect(await screen.findByText('No pudimos cargar tus estadísticas.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'water' })).not.toBeInTheDocument();
+
+    // Reintentar refetchea la query fallida (el mock vuelve a resolver con el
+    // fixture del beforeEach) y el ejercicio aparece.
+    await userEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByRole('button', { name: 'water' })).toBeInTheDocument();
+  });
 });
