@@ -141,7 +141,7 @@ congelado → lint → build → tests. El badge de arriba refleja el estado de 
 
 - [x] **Fase 1** — Monorepo, backend hexagonal, pipeline de ingesta, API REST *(completa)*
 - [x] **Fase 2** — Web en React + Vite: auth, camino del curso, reproductor de lecciones *(completa)*
-- [x] **Fase 3A** — Gamificación: XP, niveles, racha diaria y corazones *(completa)*
+- [ ] **Fase 3A** — Gamificación: XP, niveles, racha diaria y corazones *(en curso — smoke real pendiente)*
 - [ ] **Fase 3B** — Gemas, congeladores de racha, ligas semanales, logros
 - [ ] **Fase 4** — App móvil con React Native + Expo (reusa `packages/core`)
 - [ ] **Fase 5** — Portugués e italiano (solo correr el pipeline) + despliegue
@@ -158,7 +158,7 @@ nivel, racha, corazones, gemas) — lo consume la `StatsBar` de la web.
 | **XP por lección** | `clamp(15 − errores, 10, 15)` — entre 10 y 15 XP, sin importar cuántos errores |
 | **Nivel** | XP acumulado necesario para el nivel *n*: `100 · (2^(n−1) − 1)` (curva exponencial: nivel 2 a los 100 XP, nivel 3 a los 300, nivel 4 a los 700…) |
 | **Racha diaria** | Se extiende si la lección de hoy es consecutiva a la de ayer; si se salta un día pero quedan congeladores (`streak_freezes`) disponibles, consume uno y la racha sigue viva; si no, se reinicia en 1 |
-| **Corazones** | Máximo 5, −1 por cada error (mínimo 0), +1 cada 4 horas — calculado *al leer* (sin cron ni job en background) |
+| **Corazones** | Máximo 5, −1 por cada error (mínimo 0), +1 cada 4 horas — calculado *al leer* (sin cron ni job en background); sin corazones solo se pueden abrir lecciones ya completadas (repaso) |
 
 ## Documentación
 
