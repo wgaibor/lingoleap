@@ -281,3 +281,34 @@ a.lesson-node:active .lesson-node-circle-completed {
 .button-continue-incorrect {
   color: var(--color-danger);
 }
+
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+  font-weight: 700;
+}
+
+.stats-item {
+  white-space: nowrap;
+}
+
+.stats-level-bar {
+  flex: 1;
+  height: var(--space-sm);
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.stats-level-fill {
+  height: 100%;
+  background: var(--color-warning);
+  border-radius: var(--radius-pill);
+}
