@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Lesson } from '@lingoleap/core';
 import type { CourseRepository } from '../ports/course.repository';
 import type { ProgressRepository } from '../ports/progress.repository';
+import type { StatsRepository } from '../ports/stats.repository';
+import type { UserStats } from '../../domain/user-stats';
 import { LessonNotFoundError } from '../../domain/errors';
 import { CompleteLessonUseCase } from './complete-lesson.use-case';
 import { GetProgressUseCase } from './get-progress.use-case';
@@ -27,17 +29,61 @@ class FakeProgress implements ProgressRepository {
   }
 }
 
+class FakeStats implements StatsRepository {
+  constructor(private readonly stored: UserStats | null) {}
+  saved: UserStats[] = [];
+  async findByUser(): Promise<UserStats | null> { return this.stored; }
+  async save(stats: UserStats): Promise<void> { this.saved.push(stats); }
+}
+
+const NOW = '2026-07-12T12:00:00.000Z';
+const courses = new FakeCourses();
+const progress = new FakeProgress();
+
 describe('CompleteLessonUseCase', () => {
   it('registra la lección completada para el usuario', async () => {
     const progress = new FakeProgress();
-    const useCase = new CompleteLessonUseCase({ courses: new FakeCourses(), progress });
-    await useCase.execute('u1', 'l1');
+    const stats = new FakeStats(null);
+    const useCase = new CompleteLessonUseCase({ courses: new FakeCourses(), progress, stats, now: () => NOW });
+    await useCase.execute({ userId: 'u1', lessonId: 'l1', errorCount: 0, clientDate: '2026-07-12' });
     expect(progress.completed).toEqual([{ userId: 'u1', lessonId: 'l1' }]);
   });
 
   it('lanza LessonNotFoundError si la lección no existe', async () => {
-    const useCase = new CompleteLessonUseCase({ courses: new FakeCourses(), progress: new FakeProgress() });
-    await expect(useCase.execute('u1', 'nope')).rejects.toThrow(LessonNotFoundError);
+    const useCase = new CompleteLessonUseCase({
+      courses: new FakeCourses(), progress: new FakeProgress(), stats: new FakeStats(null), now: () => NOW
+    });
+    await expect(
+      useCase.execute({ userId: 'u1', lessonId: 'nope', errorCount: 0, clientDate: '2026-07-12' })
+    ).rejects.toThrow(LessonNotFoundError);
+  });
+
+  it('primera lección: 15 XP sin errores, racha 1, corazones intactos', async () => {
+    const stats = new FakeStats(null);
+    const useCase = new CompleteLessonUseCase({ courses, progress, stats, now: () => NOW });
+    const rewards = await useCase.execute({ userId: 'u1', lessonId: lesson.id, errorCount: 0, clientDate: '2026-07-12' });
+    expect(rewards).toEqual({ xpEarned: 15, totalXp: 15, level: 1, streakCount: 1, freezeUsed: false, hearts: 5 });
+    expect(stats.saved[0]).toMatchObject({ xp: 15, streakCount: 1, lastLessonDate: '2026-07-12', hearts: 5 });
+  });
+
+  it('con 3 errores: 12 XP y pierde 3 corazones', async () => {
+    const stats = new FakeStats(null);
+    const useCase = new CompleteLessonUseCase({ courses, progress, stats, now: () => NOW });
+    const rewards = await useCase.execute({ userId: 'u1', lessonId: lesson.id, errorCount: 3, clientDate: '2026-07-12' });
+    expect(rewards.xpEarned).toBe(12);
+    expect(rewards.hearts).toBe(2);
+  });
+
+  it('extiende la racha de ayer y usa la fecha del servidor si la del cliente es inválida', async () => {
+    const stats = new FakeStats({
+      userId: 'u1', xp: 90, streakCount: 4, lastLessonDate: '2026-07-11',
+      hearts: 5, heartsUpdatedAt: NOW, gems: 0, streakFreezes: 0
+    });
+    const useCase = new CompleteLessonUseCase({ courses, progress, stats, now: () => NOW });
+    const rewards = await useCase.execute({ userId: 'u1', lessonId: lesson.id, errorCount: 0, clientDate: 'no-es-fecha' });
+    expect(rewards.streakCount).toBe(5); // el servidor usa 2026-07-12 (UTC de NOW); ayer fue 07-11
+    expect(rewards.totalXp).toBe(105);
+    expect(rewards.level).toBe(2);
   });
 });
 

@@ -52,9 +52,9 @@ import { StatsController } from './stats.controller';
     },
     {
       provide: CompleteLessonUseCase,
-      useFactory: (courses: CourseRepository, progress: ProgressRepository) =>
-        new CompleteLessonUseCase({ courses, progress }),
-      inject: [COURSE_REPOSITORY, PROGRESS_REPOSITORY]
+      useFactory: (courses: CourseRepository, progress: ProgressRepository, stats: StatsRepository) =>
+        new CompleteLessonUseCase({ courses, progress, stats }),
+      inject: [COURSE_REPOSITORY, PROGRESS_REPOSITORY, STATS_REPOSITORY]
     },
     {
       provide: GetProgressUseCase,
