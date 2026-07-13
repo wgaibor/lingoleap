@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { progressRatio, type Exercise, type LearningLanguage } from '@lingoleap/core';
+import { canStartLesson, progressRatio, type Exercise, type LearningLanguage } from '@lingoleap/core';
 import { api } from '../../app/api';
 import { localDateString } from '../../shared/localDate';
+import { useProgress } from '../course-path/queries';
+import { useStats } from '../stats/queries';
 import { useSessionStore } from './sessionStore';
 import { FeedbackBar } from './FeedbackBar';
 import { CompletionScreen } from './CompletionScreen';
@@ -69,11 +71,18 @@ export function LessonPlayerPage() {
     enabled: Boolean(lessonId)
   });
 
+  const statsQuery = useStats();
+  const progressQuery = useProgress();
+  const stats = statsQuery.data;
+  const completedIds = progressQuery.data;
+  const lessonAlreadyCompleted = Boolean(lessonId && completedIds?.includes(lessonId));
+  const blocked = Boolean(stats && completedIds && !canStartLesson(stats.hearts, lessonAlreadyCompleted));
+
   useEffect(() => {
-    if (lessonQuery.data) {
+    if (lessonQuery.data && stats && completedIds && !blocked) {
       start(lessonQuery.data);
     }
-  }, [lessonQuery.data, start]);
+  }, [lessonQuery.data, stats, completedIds, blocked, start]);
 
   const completeMutation = useMutation({
     mutationFn: () =>
@@ -115,7 +124,34 @@ export function LessonPlayerPage() {
     );
   }
 
-  if (lessonQuery.isPending || !state || !belongsToCurrentLesson) {
+  if (lessonQuery.isPending || statsQuery.isPending || progressQuery.isPending) {
+    return (
+      <div className="container">
+        <p>Cargando…</p>
+      </div>
+    );
+  }
+
+  if (stats && blocked) {
+    return (
+      <div className="container no-hearts">
+        <h2>Te quedaste sin corazones</h2>
+        <p>Se regenera 1 corazón cada 4 horas.</p>
+        {stats.nextHeartAt && (
+          <p>
+            El próximo llega a las{' '}
+            {new Date(stats.nextHeartAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}.
+          </p>
+        )}
+        <p>Mientras tanto, repasa una lección completada: no pierdes corazones por repasar lo aprendido.</p>
+        <button type="button" className="button button-primary" onClick={() => navigate(-1)}>
+          Volver al curso
+        </button>
+      </div>
+    );
+  }
+
+  if (!state || !belongsToCurrentLesson) {
     return (
       <div className="container">
         <p>Cargando…</p>
@@ -152,12 +188,17 @@ export function LessonPlayerPage() {
     );
   }
 
+  const heartsLeft = Math.max(0, (stats?.hearts ?? 5) - state.wrongCount);
+
   return (
     <div className="container">
       <div className="lesson-player-header">
-        <p className="exercise-counter">
-          Ejercicio {state.index + 1} de {state.lesson.exercises.length}
-        </p>
+        <div className="lesson-player-top">
+          <p className="exercise-counter">
+            Ejercicio {state.index + 1} de {state.lesson.exercises.length}
+          </p>
+          <p className={`player-hearts${heartsLeft === 0 ? ' player-hearts-zero' : ''}`}>❤️ {heartsLeft}</p>
+        </div>
         <div className="progress-bar">
           <div className="progress-bar-fill" style={{ width: `${progressRatio(state) * 100}%` }} />
         </div>

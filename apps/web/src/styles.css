@@ -69,6 +69,29 @@ a {
   margin-bottom: var(--space-xl);
 }
 
+.lesson-player-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.player-hearts {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.player-hearts-zero {
+  color: var(--color-danger);
+}
+
+.no-hearts {
+  text-align: center;
+}
+
 .progress-bar {
   background: var(--color-border);
   border-radius: var(--radius-pill);
