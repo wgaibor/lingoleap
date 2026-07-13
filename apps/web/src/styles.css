@@ -217,6 +217,17 @@ a.lesson-node:active .lesson-node-circle-completed {
   color: var(--color-text-muted);
 }
 
+.completion-rewards {
+  margin: var(--space-md) 0;
+}
+
+.completion-xp {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin: 0 0 var(--space-sm);
+}
+
 .feedback-bar {
   position: sticky;
   bottom: 0;

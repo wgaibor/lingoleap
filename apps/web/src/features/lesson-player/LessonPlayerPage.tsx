@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { progressRatio, type Exercise, type LearningLanguage } from '@lingoleap/core';
 import { api } from '../../app/api';
+import { localDateString } from '../../shared/localDate';
 import { useSessionStore } from './sessionStore';
 import { FeedbackBar } from './FeedbackBar';
 import { CompletionScreen } from './CompletionScreen';
@@ -75,12 +76,19 @@ export function LessonPlayerPage() {
   }, [lessonQuery.data, start]);
 
   const completeMutation = useMutation({
-    mutationFn: (id: string) => api.completeLesson(id),
+    mutationFn: () =>
+      api.completeLesson(lessonId as string, { errorCount: state?.wrongCount ?? 0, date: localDateString() }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['progress'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
     }
   });
-  const { mutate: completeLessonMutate, isError: completeLessonFailed, isPending: completeLessonPending } = completeMutation;
+  const {
+    mutate: completeLessonMutate,
+    data: completeLessonRewards,
+    isError: completeLessonFailed,
+    isPending: completeLessonPending
+  } = completeMutation;
 
   // Ownership guard: el estado 'finished' solo cuenta como el de ESTA lección
   // si state.lesson.id coincide con lessonId. Sin esto, el estado 'finished'
@@ -91,12 +99,12 @@ export function LessonPlayerPage() {
   useEffect(() => {
     if (state?.phase === 'finished' && belongsToCurrentLesson && !completedRef.current && lessonId) {
       completedRef.current = true;
-      completeLessonMutate(lessonId);
+      completeLessonMutate();
     }
   }, [state?.phase, belongsToCurrentLesson, lessonId, completeLessonMutate]);
 
   function handleRetryComplete() {
-    if (lessonId) completeLessonMutate(lessonId);
+    if (lessonId) completeLessonMutate();
   }
 
   if (lessonQuery.isError) {
@@ -124,6 +132,7 @@ export function LessonPlayerPage() {
         saveError={completeLessonFailed}
         onRetry={handleRetryComplete}
         retryPending={completeLessonPending}
+        rewards={completeLessonRewards}
       />
     );
   }

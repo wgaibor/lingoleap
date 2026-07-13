@@ -6,7 +6,7 @@ import type { Lesson } from '@lingoleap/core';
 // vi.mock is hoisted above module-level const declarations, so the fixtures
 // must be created via vi.hoisted() to avoid a temporal-dead-zone error when
 // the mock factory reads them (same pattern as CoursePathPage.spec.tsx).
-const { lesson, getLesson, completeLesson } = vi.hoisted(() => ({
+const { lesson, rewards, getLesson, completeLesson } = vi.hoisted(() => ({
   lesson: {
     id: 'l1', title: 'Lección 1', position: 1,
     exercises: [
@@ -15,6 +15,7 @@ const { lesson, getLesson, completeLesson } = vi.hoisted(() => ({
         options: [ { label: 'milk', imageUrl: null, correct: true }, { label: 'tea', imageUrl: null, correct: false } ] }
     ]
   } satisfies Lesson,
+  rewards: { xpEarned: 15, totalXp: 15, level: 1, streakCount: 1, freezeUsed: false, hearts: 5 },
   getLesson: vi.fn(),
   completeLesson: vi.fn().mockResolvedValue(undefined)
 }));
@@ -33,7 +34,7 @@ import { useSessionStore } from './sessionStore';
 describe('LessonPlayerPage', () => {
   beforeEach(() => {
     getLesson.mockReset().mockResolvedValue(lesson);
-    completeLesson.mockClear();
+    completeLesson.mockReset().mockResolvedValue(rewards);
     useSessionStore.getState().reset();
   });
 
@@ -54,8 +55,13 @@ describe('LessonPlayerPage', () => {
 
     // Pantalla final
     expect(await screen.findByText('¡Lección completada!')).toBeInTheDocument();
-    expect(completeLesson).toHaveBeenCalledWith('l1');
+    expect(completeLesson).toHaveBeenCalledWith('l1', {
+      errorCount: 0,
+      date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
+    });
     expect(completeLesson).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('+15 XP')).toBeInTheDocument();
+    expect(screen.getByText(/Racha: 1/)).toBeInTheDocument();
   });
 
   it('muestra un estado vacío si la lección no tiene ejercicios', async () => {
@@ -95,7 +101,7 @@ describe('LessonPlayerPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Comprobar' }));
     await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     expect(await screen.findByText('¡Lección completada!')).toBeInTheDocument();
-    expect(completeLesson).toHaveBeenCalledWith('l1');
+    expect(completeLesson).toHaveBeenCalledWith('l1', expect.anything());
 
     completeLesson.mockClear();
     first.unmount();
@@ -105,7 +111,7 @@ describe('LessonPlayerPage', () => {
 
     expect(await screen.findByRole('button', { name: 'sun' })).toBeInTheDocument();
     expect(screen.queryByText('¡Lección completada!')).not.toBeInTheDocument();
-    expect(completeLesson).not.toHaveBeenCalledWith('l2');
+    expect(completeLesson).not.toHaveBeenCalledWith('l2', expect.anything());
   });
 
   it('muestra un error y permite reintentar si falla el guardado del progreso', async () => {
