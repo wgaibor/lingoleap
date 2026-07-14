@@ -142,7 +142,9 @@ congelado → lint → build → tests. El badge de arriba refleja el estado de 
 - [x] **Fase 1** — Monorepo, backend hexagonal, pipeline de ingesta, API REST *(completa)*
 - [x] **Fase 2** — Web en React + Vite: auth, camino del curso, reproductor de lecciones *(completa)*
 - [ ] **Fase 3A** — Gamificación: XP, niveles, racha diaria y corazones *(smoke real completo — falta merge a master)*
-- [ ] **Fase 3B** — Gemas, congeladores de racha, ligas semanales, logros
+- [ ] **Fase 3B** — Gemas, congeladores de racha, ligas semanales, logros *(primer corte
+      completo: logros + gemas — falta gastar gemas en congeladores comprados, liga semanal, y
+      el merge a master)*
 - [ ] **Fase 4** — App móvil con React Native + Expo (reusa `packages/core`)
 - [ ] **Fase 5** — Portugués e italiano (solo correr el pipeline) + despliegue
 
@@ -159,6 +161,25 @@ nivel, racha, corazones, gemas) — lo consume la `StatsBar` de la web.
 | **Nivel** | XP acumulado necesario para el nivel *n*: `100 · (2^(n−1) − 1)` (curva exponencial: nivel 2 a los 100 XP, nivel 3 a los 300, nivel 4 a los 700…) |
 | **Racha diaria** | Se extiende si la lección de hoy es consecutiva a la de ayer; si se salta un día pero quedan congeladores (`streak_freezes`) disponibles, consume uno y la racha sigue viva; si no, se reinicia en 1 |
 | **Corazones** | Máximo 5, −1 por cada error (mínimo 0), +1 cada 4 horas — calculado *al leer* (sin cron ni job en background); sin corazones solo se pueden abrir lecciones ya completadas (repaso) |
+
+## Logros y gemas (Fase 3B, primer corte)
+
+Al completar una lección, el servidor evalúa si el usuario acaba de cruzar el umbral de algún
+logro (racha, lecciones completadas o nivel) y le otorga sus gemas — `GET /me/achievements`
+expone los 8 logros del catálogo (`packages/core/src/logic/achievements.ts`), desbloqueados o
+no, y la web los muestra en `/achievements` agrupados por categoría, con un aviso extra en la
+pantalla de fin de lección cuando se desbloquea uno nuevo.
+
+| Logro | Categoría | Umbral | Gemas |
+|---|---|---|---|
+| Racha de 3 días | Racha | 3 días | 💎 5 |
+| Racha de 7 días | Racha | 7 días | 💎 15 |
+| Racha de 30 días | Racha | 30 días | 💎 30 |
+| 10 lecciones completadas | Lecciones | 10 lecciones | 💎 5 |
+| 50 lecciones completadas | Lecciones | 50 lecciones | 💎 15 |
+| 100 lecciones completadas | Lecciones | 100 lecciones | 💎 30 |
+| Nivel 5 alcanzado | Nivel | nivel 5 | 💎 5 |
+| Nivel 10 alcanzado | Nivel | nivel 10 | 💎 15 |
 
 ## Documentación
 

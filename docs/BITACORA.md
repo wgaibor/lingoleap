@@ -545,6 +545,154 @@ Del ledger de tareas (`.superpowers/sdd/progress.md`), triada al cierre de la fa
 
 ---
 
+## Fase 3B — Logros y gemas (primer corte) (2026-07-14)
+
+> Primer corte de la Fase 3B: catálogo de logros, gemas como recompensa y su exposición en la
+> web. Las 7 tareas de código están completas, revisadas y en verde en
+> `feature/fase-3b-logros-gemas`. El resto de la Fase 3B original (gastar gemas en un
+> congelador de racha comprado, y la liga semanal con cron) queda deliberadamente fuera de este
+> corte — cada una necesita su propio brainstorm antes de planearse. Queda pendiente la Task 9:
+> smoke manual y merge a `master`.
+
+### El problema a resolver
+
+La Fase 3A dejó XP, nivel, racha y corazones funcionando, pero ningún hito reconocible: un
+usuario que llega a 7 días de racha o a su lección 50 no recibe ninguna señal de que cruzó algo
+especial, más allá del número subiendo en la `StatsBar`. Esta fase agrega **logros** (hitos
+fijos por racha, lecciones completadas y nivel) que, al desbloquearse, otorgan **gemas** — la
+moneda que ya existía en el esquema desde la Fase 3A (`user_stats.gems`, sin nada todavía que la
+otorgara) pero que hasta ahora estaba muerta.
+
+### Decisiones técnicas y su porqué
+
+| Decisión | Alternativas consideradas | Por qué se eligió |
+|---|---|---|
+| **Catálogo de logros estático en código** (`ACHIEVEMENTS` en `packages/core/src/logic/achievements.ts`) | Una tabla de catálogo en Postgres (`achievements` con sus umbrales/gemas) | Los 8 logros de este corte son fijos y no los edita nadie desde un panel de administración — no existe ese panel ni está planeado. Una tabla de catálogo agrega una consulta y un join por cada evaluación sin comprar nada a cambio; el catálogo en código es la misma fuente de verdad que ya usan `unlockedAchievements()` (evaluación) y `GetAchievementsUseCase` (listado con estado) en el servidor, y la web lo importa vía `@lingoleap/core` para pintar todos los logros aunque no estén desbloqueados |
+| **`user_achievements` como tabla de unión** (`user_id`, `achievement_id`, `unlocked_at`, migración `0004_achievements.sql`) — mismo patrón que `user_progress` | Un array/jsonb de ids desbloqueados dentro de `user_stats` | Aparece siempre junto a `user_progress` en el razonamiento de la Fase 2: "¿qué logros tiene ESTE usuario?" es una pregunta natural de fila-por-hito (con su propio `unlocked_at`, útil para futuro ordenar por fecha), no una propiedad escalar del usuario. Un jsonb funcionaría, pero perdería la clave primaria compuesta `(user_id, achievement_id)` que hace que `unlock()` sea trivialmente idempotente a nivel de fila (insertar el mismo logro dos veces no duplica) |
+| **Evaluación de logros dentro de `CompleteLessonUseCase`, en el mismo request** (no un job aparte) | Cron/worker que recorra usuarios y calcule logros pendientes periódicamente | Ya se descartó un cron para corazones en la Fase 3A por la misma razón: cuesta infraestructura y puede desincronizarse. Los datos que determinan un logro (racha, lecciones completadas, nivel) ya se recalculan en cada `complete-lesson` — evaluarlos ahí es una función pura más (`unlockedAchievements`) sobre datos que la petición ya tiene en memoria, sin I/O adicional más que leer `listUnlockedIds` y escribir los nuevos |
+| **El copy en español de cada logro (`ACHIEVEMENT_LABEL`) vive en `apps/web`, no en `packages/core`** | Meter el texto directamente en `AchievementDefinition` | `packages/core` es el paquete que también va a consumir la futura app móvil, potencialmente con sus propias decisiones de copy/idioma de interfaz; el catálogo (id, categoría, umbral, gemas) es lógica de negocio y no cambia entre plataformas, pero el texto que ve un usuario sí es una decisión de presentación — mismo principio que ya separaba "dominio" de "UI" desde la Fase 2 |
+
+### Confianza cliente/servidor: qué se acepta y qué se recalcula
+
+Esta fase no agrega ninguna entrada nueva del cliente: sigue siendo el mismo body
+`{ errorCount?, date? }` de la Fase 3A, con las mismas reglas (`errorCount` clampado a
+`[0, 50]`, `date` validado por regex o descartado a favor de la fecha UTC del servidor). Los
+logros y las gemas que otorgan se calculan **100% en el servidor**, a partir de la racha, el
+conteo de lecciones y el nivel que el propio `CompleteLessonUseCase` ya recalculaba — el cliente
+nunca envía ni puede inflar "desbloqueé el logro X".
+
+### Funciones puras compartidas core↔backend
+
+`packages/core/src/logic/achievements.ts` sigue el mismo patrón que `xp.ts`/`streak.ts`/
+`hearts.ts` de la Fase 3A:
+
+- `unlockedAchievements(progress, alreadyUnlockedIds)` — sin estado, sin I/O: recibe el progreso
+  actual (`streakCount`, `lessonsCompleted`, `level`) y los ids ya desbloqueados, devuelve la
+  lista de definiciones que acaban de cruzar su umbral. La usa `CompleteLessonUseCase` en el
+  servidor para decidir qué otorgar.
+- `ACHIEVEMENTS` (el catálogo) y `AchievementStatus` (definición + `unlocked: boolean`) los
+  consume también `GetAchievementsUseCase` en el servidor (para `GET /me/achievements`) y
+  `AchievementsPage` en la web (para pintar los 8 logros, desbloqueados o no) — la misma fuente
+  de verdad en los dos lados, sin duplicar los umbrales ni las gemas en dos sitios.
+
+### Cómo se desarrolló: TDD
+
+Mismo flujo RED→GREEN→commit de las fases anteriores. La fase sumó **20 tests nuevos** (125 al
+cierre de la Fase 3A → 145 en el monorepo):
+
+- **`packages/core`**: 32 tests (26 al cierre de la Fase 3A + 6 nuevos de `achievements.spec.ts`)
+  — catálogo, umbrales por categoría, no repetir logros ya desbloqueados.
+- **`apps/api`**: 69 tests (59 al cierre de la Fase 3A + 10 nuevos) — `SupabaseAchievementsRepository`
+  con msw/fixtures, `GetAchievementsUseCase`, la extensión de `CompleteLessonUseCase` con logros y
+  gemas, el endpoint `GET /me/achievements` con supertest, y el test de regresión de idempotencia
+  (ver "Problemas reales encontrados").
+- **`packages/api-client`**: 7 tests (6 al cierre de la Fase 3A + 1 nuevo) — `getAchievements()`
+  con msw.
+- **`apps/web`**: 37 tests (34 al cierre de la Fase 3A + 3 nuevos) — `AchievementsPage` (agrupado
+  por categoría, estado bloqueado/desbloqueado) y el aviso de logro nuevo en `CompletionScreen`.
+
+Cada una de las 7 tareas de código tuvo su propia revisión de código independiente antes de
+darse por terminada. La Task 3 (la que extendió `CompleteLessonUseCase` para otorgar logros)
+necesitó un commit adicional (`858ad5a`) después de que su revisión encontrara el hallazgo
+principal de la fase — ver abajo.
+
+### Problemas reales encontrados
+
+1. **Riesgo de doble-otorgamiento en reintentos, agravado por esta fase** (Task 3): el endpoint
+   `POST /progress/lessons/:id/complete` no tiene ninguna clave de idempotencia — esto ya era
+   cierto desde la Fase 3A (XP y corazones ya se duplicaban en un reintento tras un `stats.save`
+   exitoso sin respuesta al cliente) y no tiene relación con logros. Esta tarea **amplía la
+   ventana de la carrera**: `CompleteLessonUseCase` ahora hace una segunda escritura secuencial
+   después de `stats.save` (`achievements.unlock`, ver `complete-lesson.use-case.ts:66-79`) que
+   puede fallar *después* de que las stats (XP, corazones, racha y ahora gemas) ya quedaron
+   comprometidas. El botón "Reintentar" que ya existe en producción
+   (`apps/web/src/features/lesson-player/CompletionScreen.tsx`, prop `onRetry`, disparado desde
+   `LessonPlayerPage.handleRetryComplete`) reenvía la misma petición: en el reintento,
+   `execute()` vuelve a leer un `stored` que ya refleja el primer otorgamiento y no tiene forma
+   de saber que la petición ya se procesó — XP y corazones se duplican incondicionalmente, y si
+   el logro no llegó a persistirse en `user_achievements` en el primer intento, sus gemas también
+   se duplican.
+
+   **Decisión tomada (por el dueño del proyecto, no por un agente): no rediseñar ahora.** No se
+   agregó clave de idempotencia ni transacción en este corte. En su lugar se agregó un test de
+   regresión (`apps/api/src/application/use-cases/complete-lesson.use-case.spec.ts`, el test
+   titulado `[deuda documentada, ver BITACORA Fase 3B] un reintento tras un stats.save exitoso
+   vuelve a otorgar XP y, si el logro no llegó a persistirse, también gemas`, commit `858ad5a`)
+   que fija y hace visible el comportamiento actual — con dos llamadas reales a `execute()` y
+   aserciones explícitas de que el segundo `totalXp` es 30 (no 15) y el segundo `gemsEarned` es 5
+   (no 0) — en vez de dejarlo como un bug silencioso sin ningún rastro. Mismo criterio que la
+   Fase 3A aplicó a sus propias regresiones reales (problema #4 de esa fase): documentar con
+   honestidad y con un test que lo demuestre vale más que un arreglo apurado a mitad de un plan
+   ya cerrado.
+
+### Deuda técnica registrada (consciente y priorizada)
+
+- **La de mayor prioridad**: falta de idempotencia en `POST /progress/lessons/:id/complete` —
+  ver problema #1 arriba. Solución futura concreta: una clave de idempotencia por request (el
+  cliente genera un UUID al armar la petición, el servidor la guarda y descarta reintentos con
+  la misma clave), o envolver `stats.save` + `achievements.unlock` en una única transacción/RPC
+  de Postgres para que ambas escrituras se comprometan o fallen juntas — ninguna de las dos se
+  implementó en este corte porque cualquiera de las dos es un rediseño del endpoint, no un ajuste
+  acotado a una tarea de logros.
+- La policy de RLS de `0004_achievements.sql` se llama `"leer logros propios"` (español libre,
+  como `0002_progress.sql`) en vez de snake_case como `user_stats_select_own` de
+  `0003_stats.sql` — inconsistencia ya preexistente entre migraciones anteriores, no introducida
+  por esta fase. Tampoco lleva el comentario que sí tiene `0003_stats.sql` explicando por qué la
+  policy es solo de lectura (el API escribe con `service_role`).
+- El ícono de candado/check de `AchievementsPage` (`🔒`/`✅`) está marcado `aria-hidden` sin
+  ningún texto accesible que indique el estado bloqueado/desbloqueado a un lector de pantalla —
+  viene del propio spec de diseño de la tarea, no es un descuido del implementador.
+- `ACHIEVEMENT_LABEL` (`apps/web/src/features/achievements/achievementLabels.ts`) está tipado
+  como `Record<string, string>` en vez de una unión literal de los 8 ids — no hay protección del
+  compilador si el catálogo de `packages/core` cambia en el futuro; arrastra de que
+  `AchievementDefinition.id` ya está tipado como `string` simple desde que se escribió el
+  catálogo.
+- `CompletionScreen` no tiene un test dedicado para el caso de 2+ logros desbloqueados a la vez
+  en la misma pantalla — el `.map()` sobre `achievementsUnlocked` lo soporta correctamente
+  (verificado por inspección de código en la revisión), pero ningún test lo ejercita.
+- Heredado de fases anteriores y aún sin resolver: `saveCourse` no transaccional, re-ingesta
+  rompe progreso existente, `normalize('NFC')` pendiente antes de exponer input real, Google
+  OAuth pospuesto, tests de bordes del clamp de `errorCount` sin cobertura directa, cambio de año
+  en la racha sin test.
+
+### Números de la fase
+
+- 8 commits de código hasta el cierre de esta documentación (`8c30558`, `f14f201`, `1f493ed`,
+  `858ad5a`, `a57ad7d`, `8132127`, `b48b42c`, `ffaa536`) — este commit de documentación es el 9º;
+  queda un 10º pendiente para el smoke manual de la Task 9
+- 145 tests en el monorepo (125 al cierre de la Fase 3A → 145): 32 en `packages/core`, 7 en
+  `packages/api-client`, 69 en `apps/api`, 37 en `apps/web`
+- 7 tareas de código ejecutadas con TDD, cada una con revisión de código independiente antes de
+  integrarse; 1 de ellas (Task 3) tuvo un commit adicional por el hallazgo de idempotencia (ver
+  "Problemas reales encontrados")
+- Este es un **primer corte** de la Fase 3B tal como la definía el spec de diseño original: el
+  gasto de gemas en un congelador de racha comprado y la liga semanal (con su propio cron) quedan
+  deliberadamente fuera — cada una es un sub-proyecto futuro que necesita su propio brainstorm
+  antes de planearse
+- Queda pendiente: Task 9 (smoke manual real + merge a `master`)
+
+---
+
 ## Guía rápida de entrevista
 
 **"Háblame de un proyecto tuyo"** — guion de 60 segundos:
@@ -644,4 +792,5 @@ Del ledger de tareas (`.superpowers/sdd/progress.md`), triada al cierre de la fa
 
 ---
 
-*Próxima entrada: Fase 3B — gemas, congeladores de racha, ligas semanales, logros.*
+*Próxima entrada: cierre de la Fase 3B (Task 9, smoke + merge) y, como sub-proyectos futuros
+separados, el gasto de gemas en congeladores de racha comprados y la liga semanal con cron.*
