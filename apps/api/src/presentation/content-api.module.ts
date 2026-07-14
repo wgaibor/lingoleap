@@ -6,6 +6,7 @@ import { COURSE_REPOSITORY, type CourseRepository } from '../application/ports/c
 import { PROGRESS_REPOSITORY, type ProgressRepository } from '../application/ports/progress.repository';
 import { STATS_REPOSITORY, type StatsRepository } from '../application/ports/stats.repository';
 import { CompleteLessonUseCase } from '../application/use-cases/complete-lesson.use-case';
+import { GetAchievementsUseCase } from '../application/use-cases/get-achievements.use-case';
 import { GetCourseUseCase } from '../application/use-cases/get-course.use-case';
 import { GetLessonUseCase } from '../application/use-cases/get-lesson.use-case';
 import { GetProgressUseCase } from '../application/use-cases/get-progress.use-case';
@@ -17,6 +18,7 @@ import { SupabaseAchievementsRepository } from '../infrastructure/persistence/su
 import { SupabaseProgressRepository } from '../infrastructure/persistence/supabase/supabase-progress.repository';
 import { SupabaseStatsRepository } from '../infrastructure/persistence/supabase/supabase-stats.repository';
 import { SUPABASE_CLIENT } from '../infrastructure/persistence/supabase/supabase-client.factory';
+import { AchievementsController } from './achievements.controller';
 import { AuthGuard } from './auth.guard';
 import { CoursesController } from './courses.controller';
 import { LessonsController } from './lessons.controller';
@@ -25,7 +27,7 @@ import { StatsController } from './stats.controller';
 
 @Module({
   imports: [IngestModule],
-  controllers: [CoursesController, LessonsController, ProgressController, StatsController],
+  controllers: [CoursesController, LessonsController, ProgressController, StatsController, AchievementsController],
   providers: [
     {
       provide: ListCoursesUseCase,
@@ -81,6 +83,11 @@ import { StatsController } from './stats.controller';
       provide: GetStatsUseCase,
       useFactory: (stats: StatsRepository) => new GetStatsUseCase({ stats }),
       inject: [STATS_REPOSITORY]
+    },
+    {
+      provide: GetAchievementsUseCase,
+      useFactory: (achievements: AchievementsRepository) => new GetAchievementsUseCase(achievements),
+      inject: [ACHIEVEMENTS_REPOSITORY]
     },
     AuthGuard
   ]
