@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { LearningLanguage } from '@lingoleap/core';
 import { useAuth } from '../auth/useAuth';
+import { StatsBar } from '../stats/StatsBar';
 import { useCourses } from './queries';
 
 const LANGUAGE_FLAG: Record<LearningLanguage, string> = {
@@ -15,6 +16,7 @@ export function CoursesPage() {
 
   return (
     <div className="container">
+      <StatsBar />
       <div
         style={{
           display: 'flex',

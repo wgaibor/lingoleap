@@ -390,6 +390,161 @@ reintentos de red, que es exactamente el caso de este proyecto: un POST que fall
 
 ---
 
+## Fase 3A — Gamificación: XP, niveles, racha diaria y corazones (2026-07-13)
+
+> Código de las 10 tareas técnicas completo y en verde en `feature/fase-3a-gamificacion`. El
+> smoke real de la Task 12 (2026-07-14) encontró un bug real de UI (ver problema #4 abajo),
+> ya arreglado con TDD; queda pendiente el merge final a `master`.
+
+### El problema a resolver
+
+Sumar los primeros mecanismos de motivación (XP, niveles, racha diaria con congeladores,
+corazones con regeneración) sin tocar el modelo de contenido de las Fases 1-2, dejando el
+terreno listo para la Fase 3B (gemas ya activas en el esquema, ligas semanales, logros) y para
+que la futura app móvil (Fase 4) reutilice exactamente la misma lógica de negocio, sin
+reescribirla en React Native.
+
+### Decisiones técnicas y su porqué
+
+| Decisión | Alternativas consideradas | Por qué se eligió |
+|---|---|---|
+| **Regeneración de corazones calculada al leer** (`regenerateHearts` en `GetStatsUseCase` y en `CompleteLessonUseCase`), nunca persistida por un job | Cron/worker en background que sume corazones periódicamente | `GET /me/stats` nunca escribe: solo lee `hearts` + `hearts_updated_at` guardados y calcula cuántos corazones "deberían" existir ahora mismo, comparando timestamps. Costo $0 (no hay proceso corriendo) y cero estado adicional que mantener sincronizado. La regla completa: sin corazones solo se pueden abrir lecciones ya completadas (repaso) — `canStartLesson(hearts, lessonAlreadyCompleted)` en `packages/core` |
+| **La fecha de racha la aporta el cliente** (zona horaria del usuario), **XP y corazones se calculan solo en el servidor** con entrada clampada | Confiar también en XP/corazones que mande el cliente; o calcular la fecha en el servidor (UTC) | `localDateString()` en `apps/web/src/shared/localDate.ts` usa `getFullYear/getMonth/getDate` (hora LOCAL del navegador) — nunca `toISOString()`, que devuelve el día en UTC y rompería la racha de cualquiera que complete una lección de noche cerca de la medianoche local. Pero esa fecha es la *única* concesión al cliente: el servidor clampa `errorCount` a enteros `[0, 50]` y valida `clientDate` con `/^\d{4}-\d{2}-\d{2}$/` (si no matchea, usa `nowIso.slice(0, 10)`, la fecha UTC del propio servidor) — el cliente nunca puede inflar XP o inventar corazones |
+| **`gems`/`streak_freezes` nacen en la migración `0003_stats.sql`** aunque no se otorgan ni se gastan gemas todavía (se activan en 3B) | Migrar el esquema dos veces (una para stats base, otra para gemas/congeladores) | Evitar una segunda migración sobre una tabla que ya tiene usuarios reales; la regla de racha (`applyLessonDay`) ya contempla consumir un congelador si `freezes > 0`, así que el campo no es especulativo — solo falta la UI/lógica para ganarlos |
+| **Orden de escrituras en `CompleteLessonUseCase`: `markLessonCompleted` antes de `stats.save`** — adjudicada por Joao durante la Task 6, no en el plan original | Guardar primero las stats y el progreso después | Es retry-safe: si `stats.save` falla, **nada** de las stats quedó persistido, y un reintento del cliente recalcula XP/racha/corazones desde el estado original (`stored`) sin duplicar nada. El orden inverso (stats primero) sí duplicaría XP en un reintento: la lección ya contaría como parcialmente premiada mientras el `markLessonCompleted` todavía no se confirmó. Conecta directo con el análisis de idempotencia que cerró la Fase 2 — la misma pregunta ("¿qué pasa si esto se ejecuta dos veces?") aplicada a un caso nuevo |
+
+### Confianza cliente/servidor: qué se acepta y qué se recalcula
+
+El body de `POST /progress/lessons/:id/complete` es `{ errorCount?: number; date?: string }` —
+ambos campos vienen del cliente y **ninguno se usa tal cual**:
+
+- `errorCount` se clampa con `Math.min(50, Math.max(0, Math.floor(input.errorCount)))` antes de
+  tocar cualquier fórmula — un cliente modificado no puede mandar `errorCount: -999` para ganar
+  XP máximo, ni `errorCount: 999999` para autodestruir sus corazones de otro usuario (el
+  `userId` sale del JWT verificado por `AuthGuard`, nunca del body).
+- `date` solo se acepta si matchea el regex de fecha; si no, se descarta y se usa la fecha UTC
+  del propio servidor. Es la única entrada de cliente con efecto real (decide si la racha se
+  extiende hoy o mañana según *su* zona horaria), pero no puede alterar XP ni corazones — solo
+  el conteo de días consecutivos.
+- XP, nivel, corazones perdidos y si se usó un congelador de racha: **100% recalculados en el
+  servidor** a partir del estado guardado en `user_stats` más el `errorCount` ya clampado. El
+  cliente nunca envía "gané 15 XP"; el servidor decide cuánto XP corresponde.
+
+### Funciones puras compartidas core↔backend (y futura app móvil)
+
+`packages/core/src/logic/xp.ts`, `streak.ts` y `hearts.ts` son funciones puras — mismo patrón
+que `path-status.ts`/`lesson-session.ts` de la Fase 2, pero esta vez **el consumidor principal
+es el backend**, no la web:
+
+- `lessonXp(errorCount)`, `xpRequiredForLevel(level)`, `levelProgress(totalXp)` — sin estado,
+  sin I/O.
+- `applyLessonDay(input, today)` — recibe el estado de racha y "hoy", devuelve el nuevo estado;
+  no sabe qué hora es ni de dónde salió `today`.
+- `regenerateHearts(state, nowIso)`, `loseHearts(hearts, errorCount)`, `nextHeartAt(state)`,
+  `canStartLesson(hearts, lessonAlreadyCompleted)` — el reloj (`nowIso`) entra como parámetro,
+  nunca como `Date.now()` interno, así que el mismo código es 100% testeable sin mocks de
+  tiempo y 100% reusable: `CompleteLessonUseCase` (NestJS) y `GetStatsUseCase` (NestJS) las
+  llaman en el servidor; `LessonPlayerPage` (React) usa `canStartLesson` en la web para decidir
+  si bloquear la pantalla; cuando exista la app móvil, las va a importar sin cambiar una línea.
+
+### Cómo se desarrolló: TDD
+
+Mismo flujo RED→GREEN→commit de las fases anteriores. La fase sumó **34 tests nuevos** (91 al
+cierre de la Fase 2 → 125 en el monorepo, en 39 archivos de test):
+
+- **`packages/core`**: 26 tests — `xp.spec.ts`, `streak.spec.ts`, `hearts.spec.ts` (Tasks 2-4),
+  sin mocks, con el reloj inyectado por parámetro.
+- **`apps/api`**: 59 tests (56 al cierre de la Task 5 + 3 nuevos en la Task 6) — casos de uso
+  unitarios con `FakeStats`, y e2e con supertest sobre `GET /me/stats` y el `POST` de completar
+  lección con `errorCount`/`date` reales en el body.
+- **`packages/api-client`**: 6 tests — `getStats()` y `completeLesson()` con msw.
+- **`apps/web`**: 34 tests — `StatsBar` (mock de `useStats`), `localDate.spec.ts` (formato con
+  ceros), la extensión de `LessonPlayerPage.spec.tsx` con recompensas, corazones en vivo, el
+  bloqueo sin corazones, y el test de regresión del problema #4 (Task 12).
+
+### Problemas reales encontrados (oro para entrevistas)
+
+1. **Regresión introducida por la Task 10, detectada por el revisor**: al hacer que
+   `LessonPlayerPage` dependiera de `useStats()`/`useProgress()` (para mostrar corazones en
+   vivo y bloquear lecciones), un error en `getStats`/`getCompletedLessonIds` (no un simple
+   *pending*) dejaba `isPending` en `false` con `data` en `undefined` — el guard de carga se
+   saltaba, `blocked` quedaba `false`, `start()` nunca corría, y la pantalla se congelaba en
+   "Cargando…" para siempre, sin ningún indicio de que algo había fallado. Antes de esta tarea
+   el reproductor no dependía de esos endpoints, así que el bug no existía. Fix (commit
+   `8e22ee0`): una rama de error espejo del patrón ya usado para `lessonQuery.isError` —
+   `<p role="alert">No pudimos cargar tus estadísticas.</p>` con un botón "Reintentar" que
+   refetchea *solo* la query que falló — más un test que fuerza el rechazo y verifica tanto el
+   mensaje de error como la recuperación tras el clic. Lección: *agregar una dependencia de
+   datos nueva a un componente que antes no la tenía obliga a revisar sus tres estados
+   (loading/error/success), no solo el camino feliz que pedía el brief*.
+2. **No existía el token `--color-accent`** que el diseño de la `StatsBar` hubiera usado
+   naturalmente para la barra de progreso de nivel. En vez de inventarlo o colar un hex crudo
+   (la regla dura del proyecto desde la Fase 2, problema #4), se verificó el archivo real
+   `packages/tokens/src/tokens.css` y se reutilizó el amarillo existente `--color-warning`
+   (`#FFC800`) — la regla "solo tokens" se respeta *leyendo lo que hay*, no memorizando qué
+   token "debería" existir.
+3. **Un `not.toHaveBeenCalledWith` pasaba en falso por cambio de aridad**: al extender
+   `completeLesson(id)` a `completeLesson(id, { errorCount, date })` en la Task 9, el test que
+   verificaba "no se llamó con la lección anterior" seguía escrito como
+   `expect(completeLesson).not.toHaveBeenCalledWith('l2')` — y eso pasaba *trivialmente*,
+   porque el mock ahora siempre se llama con 2 argumentos, así que ninguna llamada real matchea
+   una aserción de 1 argumento, sin importar qué lección sea. El test "pasaba" sin verificar
+   nada. Se endureció a
+   `expect(completeLesson).not.toHaveBeenCalledWith('l2', expect.anything())`. Lección: *cuando
+   cambia la firma de una función mockeada, hay que revisar también las aserciones negativas —
+   son las que más fácil quedan "pasando por accidente"*.
+4. **La pantalla de finalización nunca llegaba a verse, encontrado en el smoke manual de la
+   Task 12**: al completar una lección, `completeLesson` invalida `['stats']` y `['progress']`
+   a propósito (para que la `StatsBar` se refresque). Ese refetch trae valores *genuinamente*
+   distintos — el xp recién ganado, la lección agregada a completadas — así que TanStack Query
+   no colapsa la referencia por *structural sharing* (que sí colapsa cuando los valores no
+   cambian, que es justo lo que hacían los mocks existentes del test, ocultando el bug). El
+   `useEffect` de `LessonPlayerPage.tsx` que llama a `start(lessonQuery.data)` dependía de esas
+   referencias (`stats`/`completedIds`) sin comprobar si ya había una sesión para *esta*
+   lección, así que el refetch volvía a llamar a `start()` y tiraba la sesión `'finished'`
+   recién alcanzada — la lección se reiniciaba sola desde el ejercicio 1 antes de que el
+   usuario viera "+15 XP" y su racha, aunque los datos ya estaban bien guardados en el
+   servidor. Fix: guardar el efecto con `state?.lesson.id !== lessonQuery.data.id`, y un test de
+   regresión que reproduce el bug mockeando `getStats`/`getCompletedLessonIds` con valores que
+   cambian de verdad entre llamadas (no solo un objeto "nuevo" con los mismos valores, que
+   structural sharing habría colapsado igual). Lección: *un mock que siempre devuelve la misma
+   referencia (o un objeto nuevo pero con los mismos valores) puede ocultar bugs de
+   dependencias de efectos que solo aparecen cuando los datos cambian de verdad — hay que
+   simular el cambio real, no solo la identidad del objeto*.
+
+### Deuda técnica registrada (consciente y priorizada)
+
+Del ledger de tareas (`.superpowers/sdd/progress.md`), triada al cierre de la fase:
+
+- Tests de bordes del clamp de `errorCount` (0, 50, negativos, > 50) sin cobertura directa en
+  `complete-lesson.use-case.spec.ts` — los clamps existen y se autorrevisaron contra el código,
+  pero no tienen un test que falle si alguien los rompe.
+- `applyLessonDay`/`shiftDay` (`packages/core/src/logic/streak.ts`) no tiene test de cambio de
+  año (31 dic → 1 ene) — `Date` de JS lo maneja bien, pero no está verificado con un test.
+- Un test legado de `packages/api-client/src/client.spec.ts` ("envía el token") quedó
+  aseverando `undefined` por accidente de un mock viejo que no se actualizó al extender
+  `completeLesson` — pasa, pero no prueba lo que su nombre dice.
+- El plural "día"/"días" en el copy de racha (`🔥 Racha: N día(s)`) y la rama `freezeUsed` de
+  `CompletionScreen` no tienen test directo que verifique el texto exacto en ambos casos.
+- Heredado de Fase 1/2 y aún sin resolver: `saveCourse` no transaccional, re-ingesta rompe
+  progreso existente, `normalize('NFC')` pendiente antes de exponer input real, re-ingesta con
+  filtro de stopwords esperando que Tatoeba se recupere, Google OAuth pospuesto.
+
+### Números de la fase
+
+- 14 commits · 38 archivos · 125 tests en el monorepo (91 al cierre de la Fase 2 → 125) ·
+  lint/build/test en verde
+- 10 tareas de código ejecutadas con TDD, cada una con revisión de código independiente antes
+  de integrarse; 2 de ellas tuvieron un commit adicional por un hallazgo de revisión/smoke
+  (Task 10: ver problema #1; Task 12: ver problema #4)
+- Task 12 (smoke real con usuario, 2026-07-14): recorrido completo en el navegador contra
+  Supabase real — StatsBar, fórmula de XP, racha, corazones en vivo, bloqueo sin corazones y
+  repaso, persistencia entre recargas — todo verificado correcto salvo el problema #4
+  (encontrado y arreglado durante el propio smoke, con TDD)
+- Queda pendiente: merge a `master` + push + CI verde (flujo de cierre habitual)
+
+---
+
 ## Guía rápida de entrevista
 
 **"Háblame de un proyecto tuyo"** — guion de 60 segundos:
@@ -455,6 +610,38 @@ reintentos de red, que es exactamente el caso de este proyecto: un POST que fall
   `normalize('NFC')` antes de comparar respuestas de usuarios reales, y el guard de
   `completedRef` no tiene test directo — se encontró por auto-revisión, no por TDD.
 
+**Temas de gamificación (Fase 3A):**
+
+- *¿Cómo compartes lógica de negocio entre el backend y el frontend, en concreto?* → "Las
+  reglas de XP, racha y corazones (`packages/core/src/logic/xp.ts`, `streak.ts`, `hearts.ts`)
+  son funciones puras: reciben todo lo que necesitan por parámetro — incluido el reloj
+  (`nowIso`), nunca `Date.now()` interno — y devuelven un valor nuevo, sin tocar una base de
+  datos ni el DOM. Eso significa que `CompleteLessonUseCase` en NestJS y `LessonPlayerPage` en
+  React llaman literalmente la misma función (`canStartLesson`, por ejemplo) sin que ninguno de
+  los dos sepa que el otro existe. Cuando construya la app móvil, la importan tal cual."
+- *¿Por qué no usaste un cron job para regenerar los corazones?* → "Porque no hace falta: en
+  vez de sumar corazones cada X horas con un proceso corriendo en background (que cuesta
+  dinero, necesita monitoreo, y puede desincronizarse si se cae), `GET /me/stats` calcula al
+  vuelo cuántos corazones deberían existir *ahora* comparando `hearts_updated_at` con la hora
+  actual — es una resta y una división. Cero estado adicional, cero infraestructura, y el
+  resultado es exactamente el mismo que si un cron hubiera corrido cada 4 horas."
+- *¿Qué le confías al cliente y qué no?* → "Solo la fecha local, porque decidir 'qué día es
+  para este usuario' requiere saber su zona horaria, y eso el servidor no lo tiene sin pedirlo
+  explícitamente — pero igual la valido con un regex y caigo a la fecha UTC del servidor si no
+  matchea. Todo lo que tiene valor económico dentro del juego (XP, corazones, si se gastó un
+  congelador de racha) lo recalculo siempre en el servidor a partir de `errorCount`, y ese
+  `errorCount` lo clampeo a `[0, 50]` antes de usarlo en cualquier fórmula. La regla general:
+  el cliente puede decidir *contexto* (qué hora es donde está), nunca *resultado* (cuánto XP
+  ganó)."
+- *¿Qué es la idempotencia y dónde la aplicaste esta vez?* → usa la Task 6: el orden
+  `markLessonCompleted` → `stats.save` en `CompleteLessonUseCase` es retry-safe a propósito —
+  si el segundo paso falla, un reintento recalcula desde cero sin duplicar XP; el orden
+  inverso sí duplicaría XP en un reintento. Conecta con el análisis de idempotencia que cerró
+  la Fase 2 (mismo tipo de pregunta, caso nuevo).
+- *¿Qué harías diferente en esta fase?* → usa la sección de deuda: faltan tests de los bordes
+  del clamp de `errorCount`, de cambio de año en la racha, y un test legado del `api-client`
+  que asevera `undefined` por accidente y no se dio cuenta nadie hasta la triage final.
+
 ---
 
-*Próxima entrada: Fase 3 — gamificación (XP, rachas, corazones, ligas semanales, logros).*
+*Próxima entrada: Fase 3B — gemas, congeladores de racha, ligas semanales, logros.*

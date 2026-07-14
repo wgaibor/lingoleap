@@ -47,4 +47,35 @@ describe('LingoApiClient', () => {
     const client = new LingoApiClient({ baseUrl: BASE, getAccessToken: async () => 'tok-123' });
     await expect(client.completeLesson('l1')).resolves.toBeUndefined();
   });
+
+  it('getStats envía el token y devuelve el resumen', async () => {
+    server.use(
+      http.get(`${BASE}/me/stats`, ({ request }) => {
+        expect(request.headers.get('authorization')).toBe('Bearer token-123');
+        return HttpResponse.json({
+          xp: 120, level: 2, xpIntoLevel: 20, xpToNextLevel: 180,
+          streakCount: 3, streakFreezes: 0, gems: 0,
+          hearts: 4, maxHearts: 5, nextHeartAt: null
+        });
+      })
+    );
+    const client = new LingoApiClient({ baseUrl: BASE, getAccessToken: async () => 'token-123' });
+    const stats = await client.getStats();
+    expect(stats.level).toBe(2);
+  });
+
+  it('completeLesson envía errorCount y fecha, y devuelve las recompensas', async () => {
+    server.use(
+      http.post(`${BASE}/progress/lessons/l1/complete`, async ({ request }) => {
+        expect(await request.json()).toEqual({ errorCount: 2, date: '2026-07-12' });
+        return HttpResponse.json(
+          { completed: true, rewards: { xpEarned: 13, totalXp: 13, level: 1, streakCount: 1, freezeUsed: false, hearts: 3 } },
+          { status: 201 }
+        );
+      })
+    );
+    const client = new LingoApiClient({ baseUrl: BASE });
+    const rewards = await client.completeLesson('l1', { errorCount: 2, date: '2026-07-12' });
+    expect(rewards.xpEarned).toBe(13);
+  });
 });

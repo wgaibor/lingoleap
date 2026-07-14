@@ -1,3 +1,5 @@
+import type { LessonRewards } from '@lingoleap/core';
+
 export interface CompletionScreenProps {
   correctCount: number;
   wrongCount: number;
@@ -5,6 +7,7 @@ export interface CompletionScreenProps {
   saveError?: boolean;
   onRetry?: () => void;
   retryPending?: boolean;
+  rewards?: LessonRewards;
 }
 
 export function CompletionScreen({
@@ -13,11 +16,19 @@ export function CompletionScreen({
   onBack,
   saveError,
   onRetry,
-  retryPending
+  retryPending,
+  rewards
 }: CompletionScreenProps) {
   return (
     <div className="container">
       <h2>¡Lección completada!</h2>
+      {rewards && (
+        <div className="completion-rewards">
+          <p className="completion-xp">+{rewards.xpEarned} XP</p>
+          <p>🔥 Racha: {rewards.streakCount} {rewards.streakCount === 1 ? 'día' : 'días'}</p>
+          {rewards.freezeUsed && <p>🧊 Un congelador salvó tu racha</p>}
+        </div>
+      )}
       <p className="completion-screen-phrase">¡Gran trabajo! Cada lección te acerca más.</p>
       <p>Aciertos: {correctCount}</p>
       <p>Errores: {wrongCount}</p>

@@ -69,6 +69,29 @@ a {
   margin-bottom: var(--space-xl);
 }
 
+.lesson-player-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
+.player-hearts {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.player-hearts-zero {
+  color: var(--color-danger);
+}
+
+.no-hearts {
+  text-align: center;
+}
+
 .progress-bar {
   background: var(--color-border);
   border-radius: var(--radius-pill);
@@ -217,6 +240,17 @@ a.lesson-node:active .lesson-node-circle-completed {
   color: var(--color-text-muted);
 }
 
+.completion-rewards {
+  margin: var(--space-md) 0;
+}
+
+.completion-xp {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin: 0 0 var(--space-sm);
+}
+
 .feedback-bar {
   position: sticky;
   bottom: 0;
@@ -280,4 +314,35 @@ a.lesson-node:active .lesson-node-circle-completed {
 
 .button-continue-incorrect {
   color: var(--color-danger);
+}
+
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+  font-weight: 700;
+}
+
+.stats-item {
+  white-space: nowrap;
+}
+
+.stats-level-bar {
+  flex: 1;
+  height: var(--space-sm);
+  background: var(--color-border);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  min-width: 60px;
+}
+
+.stats-level-fill {
+  height: 100%;
+  background: var(--color-warning);
+  border-radius: var(--radius-pill);
 }

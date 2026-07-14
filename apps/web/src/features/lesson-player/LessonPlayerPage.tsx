@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { progressRatio, type Exercise, type LearningLanguage } from '@lingoleap/core';
+import { canStartLesson, progressRatio, type Exercise, type LearningLanguage } from '@lingoleap/core';
 import { api } from '../../app/api';
+import { localDateString } from '../../shared/localDate';
+import { useProgress } from '../course-path/queries';
+import { useStats } from '../stats/queries';
 import { useSessionStore } from './sessionStore';
 import { FeedbackBar } from './FeedbackBar';
 import { CompletionScreen } from './CompletionScreen';
@@ -68,19 +71,41 @@ export function LessonPlayerPage() {
     enabled: Boolean(lessonId)
   });
 
+  const statsQuery = useStats();
+  const progressQuery = useProgress();
+  const stats = statsQuery.data;
+  const completedIds = progressQuery.data;
+  const lessonAlreadyCompleted = Boolean(lessonId && completedIds?.includes(lessonId));
+  const blocked = Boolean(stats && completedIds && !canStartLesson(stats.hearts, lessonAlreadyCompleted));
+
+  // Guard contra re-disparos: stats/progreso se invalidan al completar la
+  // lección (para refrescar la StatsBar), y ese refetch trae valores
+  // realmente distintos (xp ganado, lección agregada a completadas) que
+  // structural sharing de TanStack Query no colapsa a la referencia previa.
+  // Sin comprobar si ya existe una sesión para esta lección, ese refetch
+  // volvía a llamar a start() y tiraba la sesión 'finished' recién
+  // alcanzada, reiniciando la lección antes de que el usuario viera sus
+  // recompensas.
   useEffect(() => {
-    if (lessonQuery.data) {
+    if (lessonQuery.data && stats && completedIds && !blocked && state?.lesson.id !== lessonQuery.data.id) {
       start(lessonQuery.data);
     }
-  }, [lessonQuery.data, start]);
+  }, [lessonQuery.data, stats, completedIds, blocked, start, state]);
 
   const completeMutation = useMutation({
-    mutationFn: (id: string) => api.completeLesson(id),
+    mutationFn: () =>
+      api.completeLesson(lessonId as string, { errorCount: state?.wrongCount ?? 0, date: localDateString() }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['progress'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
     }
   });
-  const { mutate: completeLessonMutate, isError: completeLessonFailed, isPending: completeLessonPending } = completeMutation;
+  const {
+    mutate: completeLessonMutate,
+    data: completeLessonRewards,
+    isError: completeLessonFailed,
+    isPending: completeLessonPending
+  } = completeMutation;
 
   // Ownership guard: el estado 'finished' solo cuenta como el de ESTA lección
   // si state.lesson.id coincide con lessonId. Sin esto, el estado 'finished'
@@ -91,12 +116,12 @@ export function LessonPlayerPage() {
   useEffect(() => {
     if (state?.phase === 'finished' && belongsToCurrentLesson && !completedRef.current && lessonId) {
       completedRef.current = true;
-      completeLessonMutate(lessonId);
+      completeLessonMutate();
     }
   }, [state?.phase, belongsToCurrentLesson, lessonId, completeLessonMutate]);
 
   function handleRetryComplete() {
-    if (lessonId) completeLessonMutate(lessonId);
+    if (lessonId) completeLessonMutate();
   }
 
   if (lessonQuery.isError) {
@@ -107,7 +132,55 @@ export function LessonPlayerPage() {
     );
   }
 
-  if (lessonQuery.isPending || !state || !belongsToCurrentLesson) {
+  // Sin este guard, un fallo de stats/progreso dejaba "Cargando…" para siempre:
+  // isPending pasa a false pero data queda undefined, así que ni el bloqueo ni
+  // start() llegan a correr, aun con corazones disponibles.
+  if (statsQuery.isError || progressQuery.isError) {
+    return (
+      <div className="container">
+        <p role="alert">No pudimos cargar tus estadísticas.</p>
+        <button
+          type="button"
+          className="button button-primary"
+          onClick={() => {
+            if (statsQuery.isError) void statsQuery.refetch();
+            if (progressQuery.isError) void progressQuery.refetch();
+          }}
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
+  if (lessonQuery.isPending || statsQuery.isPending || progressQuery.isPending) {
+    return (
+      <div className="container">
+        <p>Cargando…</p>
+      </div>
+    );
+  }
+
+  if (stats && blocked) {
+    return (
+      <div className="container no-hearts">
+        <h2>Te quedaste sin corazones</h2>
+        <p>Se regenera 1 corazón cada 4 horas.</p>
+        {stats.nextHeartAt && (
+          <p>
+            El próximo llega a las{' '}
+            {new Date(stats.nextHeartAt).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}.
+          </p>
+        )}
+        <p>Mientras tanto, repasa una lección completada: no pierdes corazones por repasar lo aprendido.</p>
+        <button type="button" className="button button-primary" onClick={() => navigate(-1)}>
+          Volver al curso
+        </button>
+      </div>
+    );
+  }
+
+  if (!state || !belongsToCurrentLesson) {
     return (
       <div className="container">
         <p>Cargando…</p>
@@ -124,6 +197,7 @@ export function LessonPlayerPage() {
         saveError={completeLessonFailed}
         onRetry={handleRetryComplete}
         retryPending={completeLessonPending}
+        rewards={completeLessonRewards}
       />
     );
   }
@@ -143,12 +217,17 @@ export function LessonPlayerPage() {
     );
   }
 
+  const heartsLeft = Math.max(0, (stats?.hearts ?? 5) - state.wrongCount);
+
   return (
     <div className="container">
       <div className="lesson-player-header">
-        <p className="exercise-counter">
-          Ejercicio {state.index + 1} de {state.lesson.exercises.length}
-        </p>
+        <div className="lesson-player-top">
+          <p className="exercise-counter">
+            Ejercicio {state.index + 1} de {state.lesson.exercises.length}
+          </p>
+          <p className={`player-hearts${heartsLeft === 0 ? ' player-hearts-zero' : ''}`}>❤️ {heartsLeft}</p>
+        </div>
         <div className="progress-bar">
           <div className="progress-bar-fill" style={{ width: `${progressRatio(state) * 100}%` }} />
         </div>

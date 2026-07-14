@@ -6,23 +6,35 @@ import type { Lesson } from '@lingoleap/core';
 // vi.mock is hoisted above module-level const declarations, so the fixtures
 // must be created via vi.hoisted() to avoid a temporal-dead-zone error when
 // the mock factory reads them (same pattern as CoursePathPage.spec.tsx).
-const { lesson, getLesson, completeLesson } = vi.hoisted(() => ({
-  lesson: {
-    id: 'l1', title: 'Lección 1', position: 1,
-    exercises: [
-      { id: 'e1', type: 'match-pairs', pairs: [{ left: 'water', right: 'agua' }] },
-      { id: 'e2', type: 'image-select', prompt: 'leche',
-        options: [ { label: 'milk', imageUrl: null, correct: true }, { label: 'tea', imageUrl: null, correct: false } ] }
-    ]
-  } satisfies Lesson,
-  getLesson: vi.fn(),
-  completeLesson: vi.fn().mockResolvedValue(undefined)
-}));
+const { lesson, rewards, statsFixture, getLesson, completeLesson, getStats, getCompletedLessonIds } = vi.hoisted(
+  () => ({
+    lesson: {
+      id: 'l1', title: 'Lección 1', position: 1,
+      exercises: [
+        { id: 'e1', type: 'match-pairs', pairs: [{ left: 'water', right: 'agua' }] },
+        { id: 'e2', type: 'image-select', prompt: 'leche',
+          options: [ { label: 'milk', imageUrl: null, correct: true }, { label: 'tea', imageUrl: null, correct: false } ] }
+      ]
+    } satisfies Lesson,
+    rewards: { xpEarned: 15, totalXp: 15, level: 1, streakCount: 1, freezeUsed: false, hearts: 5 },
+    statsFixture: {
+      xp: 0, level: 1, xpIntoLevel: 0, xpToNextLevel: 100,
+      streakCount: 0, streakFreezes: 0, gems: 0,
+      hearts: 5, maxHearts: 5, nextHeartAt: null
+    },
+    getLesson: vi.fn(),
+    completeLesson: vi.fn().mockResolvedValue(undefined),
+    getStats: vi.fn(),
+    getCompletedLessonIds: vi.fn()
+  })
+);
 
 vi.mock('../../app/api', () => ({
   api: {
     getLesson: (...a: unknown[]) => getLesson(...a),
-    completeLesson: (...a: unknown[]) => completeLesson(...a)
+    completeLesson: (...a: unknown[]) => completeLesson(...a),
+    getStats: (...a: unknown[]) => getStats(...a),
+    getCompletedLessonIds: (...a: unknown[]) => getCompletedLessonIds(...a)
   }
 }));
 
@@ -33,7 +45,9 @@ import { useSessionStore } from './sessionStore';
 describe('LessonPlayerPage', () => {
   beforeEach(() => {
     getLesson.mockReset().mockResolvedValue(lesson);
-    completeLesson.mockClear();
+    completeLesson.mockReset().mockResolvedValue(rewards);
+    getStats.mockReset().mockResolvedValue(statsFixture);
+    getCompletedLessonIds.mockReset().mockResolvedValue([]);
     useSessionStore.getState().reset();
   });
 
@@ -54,8 +68,13 @@ describe('LessonPlayerPage', () => {
 
     // Pantalla final
     expect(await screen.findByText('¡Lección completada!')).toBeInTheDocument();
-    expect(completeLesson).toHaveBeenCalledWith('l1');
+    expect(completeLesson).toHaveBeenCalledWith('l1', {
+      errorCount: 0,
+      date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/)
+    });
     expect(completeLesson).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText('+15 XP')).toBeInTheDocument();
+    expect(screen.getByText(/Racha: 1/)).toBeInTheDocument();
   });
 
   it('muestra un estado vacío si la lección no tiene ejercicios', async () => {
@@ -95,7 +114,7 @@ describe('LessonPlayerPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Comprobar' }));
     await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     expect(await screen.findByText('¡Lección completada!')).toBeInTheDocument();
-    expect(completeLesson).toHaveBeenCalledWith('l1');
+    expect(completeLesson).toHaveBeenCalledWith('l1', expect.anything());
 
     completeLesson.mockClear();
     first.unmount();
@@ -105,7 +124,7 @@ describe('LessonPlayerPage', () => {
 
     expect(await screen.findByRole('button', { name: 'sun' })).toBeInTheDocument();
     expect(screen.queryByText('¡Lección completada!')).not.toBeInTheDocument();
-    expect(completeLesson).not.toHaveBeenCalledWith('l2');
+    expect(completeLesson).not.toHaveBeenCalledWith('l2', expect.anything());
   });
 
   it('muestra un error y permite reintentar si falla el guardado del progreso', async () => {
@@ -145,5 +164,77 @@ describe('LessonPlayerPage', () => {
       expect(screen.queryByText('No pudimos guardar tu progreso.')).not.toBeInTheDocument();
     });
     expect(completeLesson).toHaveBeenCalledTimes(2);
+  });
+
+  it('bloquea una lección nueva sin corazones y ofrece volver', async () => {
+    getStats.mockResolvedValue({ ...statsFixture, hearts: 0, nextHeartAt: '2026-07-12T16:00:00.000Z' });
+    getCompletedLessonIds.mockResolvedValue([]); // l1 NO está completada
+    renderWithProviders(<LessonPlayerPage />, { route: '/lesson/l1?lang=en', path: '/lesson/:lessonId' });
+    expect(await screen.findByText('Te quedaste sin corazones')).toBeInTheDocument();
+    expect(screen.getByText(/repasa una lección completada/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'water' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Volver al curso' })).toBeInTheDocument();
+  });
+
+  it('permite repasar sin corazones una lección ya completada', async () => {
+    getStats.mockResolvedValue({ ...statsFixture, hearts: 0, nextHeartAt: null });
+    getCompletedLessonIds.mockResolvedValue(['l1']); // repaso
+    renderWithProviders(<LessonPlayerPage />, { route: '/lesson/l1?lang=en', path: '/lesson/:lessonId' });
+    expect(await screen.findByRole('button', { name: 'water' })).toBeInTheDocument();
+  });
+
+  it('no reinicia la lección al completar cuando stats/progreso cambian de valor en el refetch', async () => {
+    // Regresión: completeLesson invalida ['stats'] y ['progress'] para que la
+    // StatsBar se actualice. Ese refetch trae valores REALMENTE distintos (el
+    // xp recién ganado, la lección agregada a completadas) — TanStack Query no
+    // colapsa la referencia por structural sharing porque el contenido cambió
+    // de verdad. El useEffect que llama a start() dependía de esas referencias
+    // (stats/completedIds) sin comprobar si ya había una sesión para esta
+    // lección, así que el refetch volvía a llamar a start() y tiraba la sesión
+    // 'finished' recién alcanzada, reiniciando la lección desde el ejercicio 1
+    // antes de que el usuario llegara a ver sus recompensas.
+    let statsCall = 0;
+    getStats.mockImplementation(async () => {
+      statsCall += 1;
+      return statsCall === 1 ? statsFixture : { ...statsFixture, xp: 15 };
+    });
+    let progressCall = 0;
+    getCompletedLessonIds.mockImplementation(async () => {
+      progressCall += 1;
+      return progressCall === 1 ? [] : ['l1'];
+    });
+
+    renderWithProviders(<LessonPlayerPage />, { route: '/lesson/l1?lang=en', path: '/lesson/:lessonId' });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'water' }));
+    await userEvent.click(screen.getByRole('button', { name: 'agua' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+    await userEvent.click(screen.getByRole('button', { name: /milk/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Comprobar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+
+    expect(await screen.findByText('¡Lección completada!')).toBeInTheDocument();
+
+    // Dar tiempo a que se resuelva el refetch invalidado por completeLesson.
+    await waitFor(() => expect(getStats).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('¡Lección completada!')).toBeInTheDocument();
+  });
+
+  it('muestra un error con reintento si fallan las estadísticas', async () => {
+    // Regresión: al introducir la dependencia de stats/progreso en el player,
+    // un fallo de getStats dejaba "Cargando…" para siempre (isPending pasa a
+    // false pero data queda undefined: ni el bloqueo ni start() llegan a correr),
+    // bloqueando la lección incluso con corazones disponibles.
+    getStats.mockRejectedValueOnce(new Error('network'));
+
+    renderWithProviders(<LessonPlayerPage />, { route: '/lesson/l1?lang=en', path: '/lesson/:lessonId' });
+
+    expect(await screen.findByText('No pudimos cargar tus estadísticas.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'water' })).not.toBeInTheDocument();
+
+    // Reintentar refetchea la query fallida (el mock vuelve a resolver con el
+    // fixture del beforeEach) y el ejercicio aparece.
+    await userEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByRole('button', { name: 'water' })).toBeInTheDocument();
   });
 });

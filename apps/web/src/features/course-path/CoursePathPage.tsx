@@ -3,6 +3,7 @@ import { computePathStatus, type CEFRLevel, type LearningLanguage } from '@lingo
 import { useCourse, useProgress } from './queries';
 import { LessonNode } from './LessonNode';
 import { summarizeCourseProgress } from './courseProgress';
+import { StatsBar } from '../stats/StatsBar';
 
 export function CoursePathPage() {
   const { language, level } = useParams<{ language: LearningLanguage; level: CEFRLevel }>();
@@ -33,6 +34,7 @@ export function CoursePathPage() {
 
   return (
     <div className="container">
+      <StatsBar />
       <div className="course-path">
         <h2 className="course-path-title">{course.title}</h2>
         <div className="course-progress-header">

@@ -7,6 +7,8 @@ import { AUTH_VERIFIER } from '../application/ports/auth-verifier.port';
 import type { ProgressRepository } from '../application/ports/progress.repository';
 import { PROGRESS_REPOSITORY } from '../application/ports/progress.repository';
 import { COURSE_REPOSITORY, type CourseRepository } from '../application/ports/course.repository';
+import { STATS_REPOSITORY, type StatsRepository } from '../application/ports/stats.repository';
+import type { UserStats } from '../domain/user-stats';
 import type { Lesson } from '@lingoleap/core';
 import { ContentApiModule } from './content-api.module';
 import { DomainExceptionFilter } from './domain-exception.filter';
@@ -34,6 +36,12 @@ class FakeCourses implements CourseRepository {
   async findLessonById(id: string): Promise<Lesson | null> { return id === lesson.id ? lesson : null; }
 }
 
+class FakeStats implements StatsRepository {
+  stored: UserStats | null = null;
+  async findByUser(): Promise<UserStats | null> { return this.stored; }
+  async save(stats: UserStats): Promise<void> { this.stored = stats; }
+}
+
 describe('API de progreso', () => {
   let app: INestApplication;
   const progress = new FakeProgress();
@@ -46,6 +54,7 @@ describe('API de progreso', () => {
       .overrideProvider(AUTH_VERIFIER).useValue(new FakeVerifier())
       .overrideProvider(PROGRESS_REPOSITORY).useValue(progress)
       .overrideProvider(COURSE_REPOSITORY).useValue(new FakeCourses())
+      .overrideProvider(STATS_REPOSITORY).useValue(new FakeStats())
       .compile();
     app = moduleRef.createNestApplication();
     app.useGlobalFilters(new DomainExceptionFilter());
@@ -60,11 +69,14 @@ describe('API de progreso', () => {
     expect(res.body.code).toBe('UNAUTHORIZED');
   });
 
-  it('completa una lección con token válido', async () => {
-    await request(app.getHttpServer())
+  it('completa una lección con token válido y devuelve recompensas', async () => {
+    const res = await request(app.getHttpServer())
       .post(`/progress/lessons/${lesson.id}/complete`)
       .set('Authorization', 'Bearer valid-token')
-      .expect(201, { completed: true });
+      .send({ errorCount: 2, date: '2026-07-12' })
+      .expect(201);
+    expect(res.body.completed).toBe(true);
+    expect(res.body.rewards).toMatchObject({ xpEarned: 13, streakCount: 1, hearts: 3 });
     expect(progress.saved).toEqual([lesson.id]);
   });
 

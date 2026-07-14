@@ -1,4 +1,6 @@
-import type { CEFRLevel, Course, CourseSummary, LearningLanguage, Lesson } from '@lingoleap/core';
+import type {
+  CEFRLevel, Course, CourseSummary, LearningLanguage, Lesson, LessonRewards, StatsSummary
+} from '@lingoleap/core';
 
 export class ApiError extends Error {
   constructor(
@@ -44,8 +46,20 @@ export class LingoApiClient {
     return this.request(`/lessons/${lessonId}`);
   }
 
-  async completeLesson(lessonId: string): Promise<void> {
-    await this.request(`/progress/lessons/${lessonId}/complete`, { method: 'POST' });
+  getStats(): Promise<StatsSummary> {
+    return this.request('/me/stats');
+  }
+
+  async completeLesson(lessonId: string, options?: { errorCount?: number; date?: string }): Promise<LessonRewards> {
+    const body = await this.request<{ completed: true; rewards: LessonRewards }>(
+      `/progress/lessons/${lessonId}/complete`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ errorCount: options?.errorCount ?? 0, date: options?.date ?? null })
+      }
+    );
+    return body.rewards;
   }
 
   async getCompletedLessonIds(): Promise<string[]> {
