@@ -790,6 +790,31 @@ principal de la fase — ver abajo.
   del clamp de `errorCount`, de cambio de año en la racha, y un test legado del `api-client`
   que asevera `undefined` por accidente y no se dio cuenta nadie hasta la triage final.
 
+**Temas de logros y gemas (Fase 3B):**
+
+- *¿Por qué el catálogo de logros vive en código y no en una tabla de base de datos?* → "Con
+  8 logros fijos, una tabla de catálogo editable sin deploy es sobre-ingeniería: agrega una
+  migración y una capa de lectura que no aporta nada todavía. Seguí el mismo patrón que
+  `xp.ts`/`streak.ts`/`hearts.ts`: reglas puras en `packages/core`, sin I/O. Lo que SÍ se
+  persiste es distinto: qué logros ya desbloqueó cada usuario, en una tabla
+  `user_achievements` con la misma forma que `user_progress` — ahí no hay atajo posible, es
+  estado real por usuario."
+- *¿Por qué el texto de los logros ("Racha de 3 días", etc.) vive en la web y no en el
+  catálogo de `packages/core`?* → "Porque `packages/core` es lógica compartida con el backend
+  y la futura app móvil — mezclar copy de UI ahí acoplaría el dominio a un idioma o
+  plataforma. El catálogo solo tiene id/categoría/umbral/gemas; el mapeo a texto en español
+  vive en `apps/web/src/features/achievements/achievementLabels.ts`, y cuando exista la app
+  móvil va a tener su propio mapeo (quizás a otro idioma) sin tocar el catálogo."
+- *¿Encontraste algún problema de idempotencia en esta fase?* → "Sí, uno que no resolví a
+  propósito: si el cliente reintenta completar una lección después de que el servidor ya
+  guardó los stats pero antes de confirmar el logro, XP y gemas se otorgan dos veces — quedó
+  documentado con un test de regresión (ver 'Problemas reales encontrados' de esta fase). Es
+  distinto del caso de la Fase 3A (`markLessonCompleted` antes de `stats.save`), que sí quedó
+  resuelto con el orden de escrituras: acá hay DOS escrituras separadas (`stats.save` y
+  `achievements.unlock`) y no hay forma de hacerlas atómicas sin una transacción o una clave
+  de idempotencia — decidí documentarlo como deuda en vez de resolverlo a medias en este
+  corte."
+
 ---
 
 *Próxima entrada: cierre de la Fase 3B (Task 9, smoke + merge) y, como sub-proyectos futuros
