@@ -1,4 +1,5 @@
 import { Route, Routes } from 'react-router-dom';
+import { AchievementsPage } from './features/achievements/AchievementsPage';
 import { LoginPage } from './features/auth/LoginPage';
 import { RequireAuth } from './features/auth/RequireAuth';
 import { CoursesPage } from './features/course-path/CoursesPage';
@@ -32,6 +33,14 @@ export default function App() {
           element={
             <RequireAuth>
               <LessonPlayerPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/achievements"
+          element={
+            <RequireAuth>
+              <AchievementsPage />
             </RequireAuth>
           }
         />

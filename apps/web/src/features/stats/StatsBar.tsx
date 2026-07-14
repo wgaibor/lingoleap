@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useStats } from './queries';
 
 export function StatsBar() {
@@ -9,7 +10,7 @@ export function StatsBar() {
     <div className="stats-bar">
       <span className="stats-item" title="Racha de días seguidos">🔥 {data.streakCount}</span>
       <span className="stats-item" title="Corazones">❤️ {data.hearts}</span>
-      <span className="stats-item" title="Gemas">💎 {data.gems}</span>
+      <Link to="/achievements" className="stats-item stats-gems-link" title="Ver logros">💎 {data.gems}</Link>
       <span className="stats-item" title="Nivel">⚡ Nivel {data.level}</span>
       <div
         className="stats-level-bar"

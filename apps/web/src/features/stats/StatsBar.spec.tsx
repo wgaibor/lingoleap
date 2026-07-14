@@ -20,5 +20,6 @@ describe('StatsBar', () => {
     expect(screen.getByText('💎 0')).toBeInTheDocument();
     expect(screen.getByText('⚡ Nivel 2')).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: 'Progreso del nivel 2' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /💎 0/ })).toHaveAttribute('href', '/achievements');
   });
 });
