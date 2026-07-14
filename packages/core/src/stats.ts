@@ -1,3 +1,5 @@
+import type { AchievementDefinition } from './logic/achievements';
+
 export interface StatsSummary {
   xp: number;
   level: number;
@@ -18,4 +20,6 @@ export interface LessonRewards {
   streakCount: number;
   freezeUsed: boolean;
   hearts: number;
+  gemsEarned: number;
+  achievementsUnlocked: AchievementDefinition[];
 }

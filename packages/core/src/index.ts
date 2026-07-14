@@ -7,4 +7,5 @@ export * from './logic/lesson-session';
 export * from './logic/xp';
 export * from './logic/streak';
 export * from './logic/hearts';
+export * from './logic/achievements';
 export * from './stats';
