@@ -1,5 +1,5 @@
 import type {
-  CEFRLevel, Course, CourseSummary, LearningLanguage, Lesson, LessonRewards, StatsSummary
+  AchievementStatus, CEFRLevel, Course, CourseSummary, LearningLanguage, Lesson, LessonRewards, StatsSummary
 } from '@lingoleap/core';
 
 export class ApiError extends Error {
@@ -48,6 +48,10 @@ export class LingoApiClient {
 
   getStats(): Promise<StatsSummary> {
     return this.request('/me/stats');
+  }
+
+  getAchievements(): Promise<AchievementStatus[]> {
+    return this.request('/me/achievements');
   }
 
   async completeLesson(lessonId: string, options?: { errorCount?: number; date?: string }): Promise<LessonRewards> {

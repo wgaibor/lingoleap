@@ -64,6 +64,22 @@ describe('LingoApiClient', () => {
     expect(stats.level).toBe(2);
   });
 
+  it('getAchievements envía el token y devuelve el catálogo con su estado', async () => {
+    server.use(
+      http.get(`${BASE}/me/achievements`, ({ request }) => {
+        expect(request.headers.get('authorization')).toBe('Bearer token-123');
+        return HttpResponse.json([
+          { id: 'streak-3', category: 'streak', threshold: 3, gems: 5, unlocked: true },
+          { id: 'streak-7', category: 'streak', threshold: 7, gems: 15, unlocked: false }
+        ]);
+      })
+    );
+    const client = new LingoApiClient({ baseUrl: BASE, getAccessToken: async () => 'token-123' });
+    const achievements = await client.getAchievements();
+    expect(achievements).toHaveLength(2);
+    expect(achievements[0]).toMatchObject({ id: 'streak-3', unlocked: true });
+  });
+
   it('completeLesson envía errorCount y fecha, y devuelve las recompensas', async () => {
     server.use(
       http.post(`${BASE}/progress/lessons/l1/complete`, async ({ request }) => {
