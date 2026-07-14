@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { ACHIEVEMENTS_REPOSITORY, type AchievementsRepository } from '../application/ports/achievements.repository';
 import { AUTH_VERIFIER } from '../application/ports/auth-verifier.port';
 import { COURSE_REPOSITORY, type CourseRepository } from '../application/ports/course.repository';
 import { PROGRESS_REPOSITORY, type ProgressRepository } from '../application/ports/progress.repository';
@@ -12,6 +13,7 @@ import { GetStatsUseCase } from '../application/use-cases/get-stats.use-case';
 import { ListCoursesUseCase } from '../application/use-cases/list-courses.use-case';
 import { SupabaseAuthVerifier } from '../infrastructure/auth/supabase-auth.verifier';
 import { IngestModule } from '../infrastructure/ingest.module';
+import { SupabaseAchievementsRepository } from '../infrastructure/persistence/supabase/supabase-achievements.repository';
 import { SupabaseProgressRepository } from '../infrastructure/persistence/supabase/supabase-progress.repository';
 import { SupabaseStatsRepository } from '../infrastructure/persistence/supabase/supabase-stats.repository';
 import { SUPABASE_CLIENT } from '../infrastructure/persistence/supabase/supabase-client.factory';
@@ -51,10 +53,19 @@ import { StatsController } from './stats.controller';
       inject: [SUPABASE_CLIENT]
     },
     {
+      provide: ACHIEVEMENTS_REPOSITORY,
+      useFactory: (c: SupabaseClient) => new SupabaseAchievementsRepository(c),
+      inject: [SUPABASE_CLIENT]
+    },
+    {
       provide: CompleteLessonUseCase,
-      useFactory: (courses: CourseRepository, progress: ProgressRepository, stats: StatsRepository) =>
-        new CompleteLessonUseCase({ courses, progress, stats }),
-      inject: [COURSE_REPOSITORY, PROGRESS_REPOSITORY, STATS_REPOSITORY]
+      useFactory: (
+        courses: CourseRepository,
+        progress: ProgressRepository,
+        stats: StatsRepository,
+        achievements: AchievementsRepository
+      ) => new CompleteLessonUseCase({ courses, progress, stats, achievements }),
+      inject: [COURSE_REPOSITORY, PROGRESS_REPOSITORY, STATS_REPOSITORY, ACHIEVEMENTS_REPOSITORY]
     },
     {
       provide: GetProgressUseCase,

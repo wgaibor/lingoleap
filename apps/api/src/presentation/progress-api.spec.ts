@@ -4,6 +4,8 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AuthenticatedUser, AuthVerifier } from '../application/ports/auth-verifier.port';
 import { AUTH_VERIFIER } from '../application/ports/auth-verifier.port';
+import type { AchievementsRepository } from '../application/ports/achievements.repository';
+import { ACHIEVEMENTS_REPOSITORY } from '../application/ports/achievements.repository';
 import type { ProgressRepository } from '../application/ports/progress.repository';
 import { PROGRESS_REPOSITORY } from '../application/ports/progress.repository';
 import { COURSE_REPOSITORY, type CourseRepository } from '../application/ports/course.repository';
@@ -42,6 +44,12 @@ class FakeStats implements StatsRepository {
   async save(stats: UserStats): Promise<void> { this.stored = stats; }
 }
 
+class FakeAchievements implements AchievementsRepository {
+  unlocked: string[] = [];
+  async listUnlockedIds(): Promise<string[]> { return this.unlocked; }
+  async unlock(_userId: string, achievementId: string): Promise<void> { this.unlocked.push(achievementId); }
+}
+
 describe('API de progreso', () => {
   let app: INestApplication;
   const progress = new FakeProgress();
@@ -55,6 +63,7 @@ describe('API de progreso', () => {
       .overrideProvider(PROGRESS_REPOSITORY).useValue(progress)
       .overrideProvider(COURSE_REPOSITORY).useValue(new FakeCourses())
       .overrideProvider(STATS_REPOSITORY).useValue(new FakeStats())
+      .overrideProvider(ACHIEVEMENTS_REPOSITORY).useValue(new FakeAchievements())
       .compile();
     app = moduleRef.createNestApplication();
     app.useGlobalFilters(new DomainExceptionFilter());

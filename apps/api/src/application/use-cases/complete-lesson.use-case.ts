@@ -1,8 +1,10 @@
 import {
-  applyLessonDay, lessonXp, levelProgress, loseHearts, regenerateHearts, type LessonRewards
+  applyLessonDay, lessonXp, levelProgress, loseHearts, regenerateHearts, unlockedAchievements,
+  type LessonRewards
 } from '@lingoleap/core';
 import { LessonNotFoundError } from '../../domain/errors';
 import { defaultUserStats } from '../../domain/user-stats';
+import type { AchievementsRepository } from '../ports/achievements.repository';
 import type { CourseRepository } from '../ports/course.repository';
 import type { ProgressRepository } from '../ports/progress.repository';
 import type { StatsRepository } from '../ports/stats.repository';
@@ -23,6 +25,7 @@ export class CompleteLessonUseCase {
       courses: CourseRepository;
       progress: ProgressRepository;
       stats: StatsRepository;
+      achievements: AchievementsRepository;
       now?: () => string;
     }
   ) {}
@@ -50,6 +53,15 @@ export class CompleteLessonUseCase {
       { count: stored.streakCount, lastDate: stored.lastLessonDate, freezes: stored.streakFreezes },
       today
     );
+    const level = levelProgress(totalXp).level;
+
+    const lessonsCompleted = (await this.deps.progress.listCompletedLessonIds(input.userId)).length;
+    const alreadyUnlocked = await this.deps.achievements.listUnlockedIds(input.userId);
+    const newlyUnlocked = unlockedAchievements(
+      { streakCount: streak.count, lessonsCompleted, level },
+      alreadyUnlocked
+    );
+    const gemsEarned = newlyUnlocked.reduce((sum, a) => sum + a.gems, 0);
 
     await this.deps.stats.save({
       userId: input.userId,
@@ -58,17 +70,23 @@ export class CompleteLessonUseCase {
       lastLessonDate: streak.lastDate,
       hearts,
       heartsUpdatedAt: regen.updatedAt,
-      gems: stored.gems,
+      gems: stored.gems + gemsEarned,
       streakFreezes: streak.freezes
     });
+
+    for (const achievement of newlyUnlocked) {
+      await this.deps.achievements.unlock(input.userId, achievement.id, nowIso);
+    }
 
     return {
       xpEarned,
       totalXp,
-      level: levelProgress(totalXp).level,
+      level,
       streakCount: streak.count,
       freezeUsed: streak.freezeUsed,
-      hearts
+      hearts,
+      gemsEarned,
+      achievementsUnlocked: newlyUnlocked
     };
   }
 }
