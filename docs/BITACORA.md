@@ -392,9 +392,9 @@ reintentos de red, que es exactamente el caso de este proyecto: un POST que fall
 
 ## Fase 3A — Gamificación: XP, niveles, racha diaria y corazones (2026-07-13)
 
-> Código de las 10 tareas técnicas completo y en verde en `feature/fase-3a-gamificacion`;
-> queda pendiente la Task 12 (smoke real con usuario + revisión final de rama + merge a
-> `master`), igual que en la Fase 2 esta entrada se escribe antes del smoke.
+> Código de las 10 tareas técnicas completo y en verde en `feature/fase-3a-gamificacion`. El
+> smoke real de la Task 12 (2026-07-14) encontró un bug real de UI (ver problema #4 abajo),
+> ya arreglado con TDD; queda pendiente el merge final a `master`.
 
 ### El problema a resolver
 
@@ -449,8 +449,8 @@ es el backend**, no la web:
 
 ### Cómo se desarrolló: TDD
 
-Mismo flujo RED→GREEN→commit de las fases anteriores. La fase sumó **33 tests nuevos** (91 al
-cierre de la Fase 2 → 124 en el monorepo, en 39 archivos de test):
+Mismo flujo RED→GREEN→commit de las fases anteriores. La fase sumó **34 tests nuevos** (91 al
+cierre de la Fase 2 → 125 en el monorepo, en 39 archivos de test):
 
 - **`packages/core`**: 26 tests — `xp.spec.ts`, `streak.spec.ts`, `hearts.spec.ts` (Tasks 2-4),
   sin mocks, con el reloj inyectado por parámetro.
@@ -458,9 +458,9 @@ cierre de la Fase 2 → 124 en el monorepo, en 39 archivos de test):
   unitarios con `FakeStats`, y e2e con supertest sobre `GET /me/stats` y el `POST` de completar
   lección con `errorCount`/`date` reales en el body.
 - **`packages/api-client`**: 6 tests — `getStats()` y `completeLesson()` con msw.
-- **`apps/web`**: 33 tests — `StatsBar` (mock de `useStats`), `localDate.spec.ts` (formato con
-  ceros), y la extensión de `LessonPlayerPage.spec.tsx` con recompensas, corazones en vivo, y
-  el bloqueo sin corazones.
+- **`apps/web`**: 34 tests — `StatsBar` (mock de `useStats`), `localDate.spec.ts` (formato con
+  ceros), la extensión de `LessonPlayerPage.spec.tsx` con recompensas, corazones en vivo, el
+  bloqueo sin corazones, y el test de regresión del problema #4 (Task 12).
 
 ### Problemas reales encontrados (oro para entrevistas)
 
@@ -493,6 +493,24 @@ cierre de la Fase 2 → 124 en el monorepo, en 39 archivos de test):
    `expect(completeLesson).not.toHaveBeenCalledWith('l2', expect.anything())`. Lección: *cuando
    cambia la firma de una función mockeada, hay que revisar también las aserciones negativas —
    son las que más fácil quedan "pasando por accidente"*.
+4. **La pantalla de finalización nunca llegaba a verse, encontrado en el smoke manual de la
+   Task 12**: al completar una lección, `completeLesson` invalida `['stats']` y `['progress']`
+   a propósito (para que la `StatsBar` se refresque). Ese refetch trae valores *genuinamente*
+   distintos — el xp recién ganado, la lección agregada a completadas — así que TanStack Query
+   no colapsa la referencia por *structural sharing* (que sí colapsa cuando los valores no
+   cambian, que es justo lo que hacían los mocks existentes del test, ocultando el bug). El
+   `useEffect` de `LessonPlayerPage.tsx` que llama a `start(lessonQuery.data)` dependía de esas
+   referencias (`stats`/`completedIds`) sin comprobar si ya había una sesión para *esta*
+   lección, así que el refetch volvía a llamar a `start()` y tiraba la sesión `'finished'`
+   recién alcanzada — la lección se reiniciaba sola desde el ejercicio 1 antes de que el
+   usuario viera "+15 XP" y su racha, aunque los datos ya estaban bien guardados en el
+   servidor. Fix: guardar el efecto con `state?.lesson.id !== lessonQuery.data.id`, y un test de
+   regresión que reproduce el bug mockeando `getStats`/`getCompletedLessonIds` con valores que
+   cambian de verdad entre llamadas (no solo un objeto "nuevo" con los mismos valores, que
+   structural sharing habría colapsado igual). Lección: *un mock que siempre devuelve la misma
+   referencia (o un objeto nuevo pero con los mismos valores) puede ocultar bugs de
+   dependencias de efectos que solo aparecen cuando los datos cambian de verdad — hay que
+   simular el cambio real, no solo la identidad del objeto*.
 
 ### Deuda técnica registrada (consciente y priorizada)
 
@@ -512,16 +530,18 @@ Del ledger de tareas (`.superpowers/sdd/progress.md`), triada al cierre de la fa
   progreso existente, `normalize('NFC')` pendiente antes de exponer input real, re-ingesta con
   filtro de stopwords esperando que Tatoeba se recupere, Google OAuth pospuesto.
 
-### Números de la fase (parcial, hasta Task 10)
+### Números de la fase
 
-- 12 commits · 36 archivos · +2.431/−52 líneas · 124 tests en el monorepo (91 al cierre de la
-  Fase 2 → 124) · lint/build/test en verde
+- 14 commits · 38 archivos · 125 tests en el monorepo (91 al cierre de la Fase 2 → 125) ·
+  lint/build/test en verde
 - 10 tareas de código ejecutadas con TDD, cada una con revisión de código independiente antes
-  de integrarse; 1 de ellas (Task 10) tuvo un commit adicional por un hallazgo *Important* de
-  esa revisión (ver problema #1 arriba)
-- Quedan pendientes en el plan: Task 11 (esta entrada + README) y Task 12 (smoke real con
-  usuario + revisión final de rama + merge a `master`) — los números finales de la fase se
-  cierran ahí, siguiendo el mismo patrón que la Fase 2 (Task 16 documentación → Task 17 smoke)
+  de integrarse; 2 de ellas tuvieron un commit adicional por un hallazgo de revisión/smoke
+  (Task 10: ver problema #1; Task 12: ver problema #4)
+- Task 12 (smoke real con usuario, 2026-07-14): recorrido completo en el navegador contra
+  Supabase real — StatsBar, fórmula de XP, racha, corazones en vivo, bloqueo sin corazones y
+  repaso, persistencia entre recargas — todo verificado correcto salvo el problema #4
+  (encontrado y arreglado durante el propio smoke, con TDD)
+- Queda pendiente: merge a `master` + push + CI verde (flujo de cierre habitual)
 
 ---
 

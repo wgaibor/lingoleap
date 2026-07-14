@@ -78,11 +78,19 @@ export function LessonPlayerPage() {
   const lessonAlreadyCompleted = Boolean(lessonId && completedIds?.includes(lessonId));
   const blocked = Boolean(stats && completedIds && !canStartLesson(stats.hearts, lessonAlreadyCompleted));
 
+  // Guard contra re-disparos: stats/progreso se invalidan al completar la
+  // lección (para refrescar la StatsBar), y ese refetch trae valores
+  // realmente distintos (xp ganado, lección agregada a completadas) que
+  // structural sharing de TanStack Query no colapsa a la referencia previa.
+  // Sin comprobar si ya existe una sesión para esta lección, ese refetch
+  // volvía a llamar a start() y tiraba la sesión 'finished' recién
+  // alcanzada, reiniciando la lección antes de que el usuario viera sus
+  // recompensas.
   useEffect(() => {
-    if (lessonQuery.data && stats && completedIds && !blocked) {
+    if (lessonQuery.data && stats && completedIds && !blocked && state?.lesson.id !== lessonQuery.data.id) {
       start(lessonQuery.data);
     }
-  }, [lessonQuery.data, stats, completedIds, blocked, start]);
+  }, [lessonQuery.data, stats, completedIds, blocked, start, state]);
 
   const completeMutation = useMutation({
     mutationFn: () =>

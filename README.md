@@ -141,7 +141,7 @@ congelado → lint → build → tests. El badge de arriba refleja el estado de 
 
 - [x] **Fase 1** — Monorepo, backend hexagonal, pipeline de ingesta, API REST *(completa)*
 - [x] **Fase 2** — Web en React + Vite: auth, camino del curso, reproductor de lecciones *(completa)*
-- [ ] **Fase 3A** — Gamificación: XP, niveles, racha diaria y corazones *(en curso — smoke real pendiente)*
+- [ ] **Fase 3A** — Gamificación: XP, niveles, racha diaria y corazones *(smoke real completo — falta merge a master)*
 - [ ] **Fase 3B** — Gemas, congeladores de racha, ligas semanales, logros
 - [ ] **Fase 4** — App móvil con React Native + Expo (reusa `packages/core`)
 - [ ] **Fase 5** — Portugués e italiano (solo correr el pipeline) + despliegue

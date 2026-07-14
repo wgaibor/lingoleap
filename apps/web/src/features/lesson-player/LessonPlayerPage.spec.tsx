@@ -183,6 +183,43 @@ describe('LessonPlayerPage', () => {
     expect(await screen.findByRole('button', { name: 'water' })).toBeInTheDocument();
   });
 
+  it('no reinicia la lección al completar cuando stats/progreso cambian de valor en el refetch', async () => {
+    // Regresión: completeLesson invalida ['stats'] y ['progress'] para que la
+    // StatsBar se actualice. Ese refetch trae valores REALMENTE distintos (el
+    // xp recién ganado, la lección agregada a completadas) — TanStack Query no
+    // colapsa la referencia por structural sharing porque el contenido cambió
+    // de verdad. El useEffect que llama a start() dependía de esas referencias
+    // (stats/completedIds) sin comprobar si ya había una sesión para esta
+    // lección, así que el refetch volvía a llamar a start() y tiraba la sesión
+    // 'finished' recién alcanzada, reiniciando la lección desde el ejercicio 1
+    // antes de que el usuario llegara a ver sus recompensas.
+    let statsCall = 0;
+    getStats.mockImplementation(async () => {
+      statsCall += 1;
+      return statsCall === 1 ? statsFixture : { ...statsFixture, xp: 15 };
+    });
+    let progressCall = 0;
+    getCompletedLessonIds.mockImplementation(async () => {
+      progressCall += 1;
+      return progressCall === 1 ? [] : ['l1'];
+    });
+
+    renderWithProviders(<LessonPlayerPage />, { route: '/lesson/l1?lang=en', path: '/lesson/:lessonId' });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'water' }));
+    await userEvent.click(screen.getByRole('button', { name: 'agua' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+    await userEvent.click(screen.getByRole('button', { name: /milk/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Comprobar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+
+    expect(await screen.findByText('¡Lección completada!')).toBeInTheDocument();
+
+    // Dar tiempo a que se resuelva el refetch invalidado por completeLesson.
+    await waitFor(() => expect(getStats).toHaveBeenCalledTimes(2));
+    expect(screen.getByText('¡Lección completada!')).toBeInTheDocument();
+  });
+
   it('muestra un error con reintento si fallan las estadísticas', async () => {
     // Regresión: al introducir la dependencia de stats/progreso en el player,
     // un fallo de getStats dejaba "Cargando…" para siempre (isPending pasa a
