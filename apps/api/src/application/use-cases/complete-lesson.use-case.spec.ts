@@ -141,6 +141,46 @@ describe('CompleteLessonUseCase', () => {
     expect(rewards.achievementsUnlocked).toEqual([]);
     expect(stats.saved[0].gems).toBe(5);
   });
+
+  it('[deuda documentada, ver BITACORA Fase 3B] un reintento tras un stats.save exitoso vuelve a otorgar XP y, si el logro no llegó a persistirse, también gemas', async () => {
+    // No hay clave de idempotencia todavía (deuda técnica aceptada a propósito,
+    // ver BITACORA): si el cliente reintenta POST /complete después de que el
+    // servidor ya persistió stats.save (p. ej. la respuesta se perdió en la
+    // red, o el logro que se cruza en este intento nunca llega a persistirse
+    // en user_achievements), execute() vuelve a leer un `stored` que ya
+    // refleja el primer otorgamiento y no tiene forma de saber que la
+    // petición ya se procesó, así que XP y (si el logro no quedó registrado)
+    // las gemas del logro se otorgan una segunda vez.
+    class PersistingStats implements StatsRepository {
+      stored: UserStats | null = null;
+      saved: UserStats[] = [];
+      async findByUser(): Promise<UserStats | null> { return this.stored; }
+      async save(stats: UserStats): Promise<void> { this.stored = stats; this.saved.push(stats); }
+    }
+    class BrokenAchievements implements AchievementsRepository {
+      // Simula que el `unlock` nunca llega a persistirse (p. ej. la conexión
+      // cae justo después de que stats.save comprometió los datos).
+      async listUnlockedIds(): Promise<string[]> { return []; }
+      async unlock(): Promise<void> {}
+    }
+
+    const progress = new FakeProgress();
+    for (let i = 0; i < 9; i++) {
+      await progress.markLessonCompleted('u1', `seed-${i}`);
+    }
+    const stats = new PersistingStats();
+    const achievements = new BrokenAchievements();
+    const useCase = new CompleteLessonUseCase({ courses, progress, stats, achievements, now: () => NOW });
+
+    const first = await useCase.execute({ userId: 'u1', lessonId: lesson.id, errorCount: 0, clientDate: '2026-07-12' });
+    expect(first.totalXp).toBe(15);
+    expect(first.gemsEarned).toBe(5);
+
+    // El cliente reintenta la MISMA petición (mismo lessonId, errorCount, fecha).
+    const retry = await useCase.execute({ userId: 'u1', lessonId: lesson.id, errorCount: 0, clientDate: '2026-07-12' });
+    expect(retry.totalXp).toBe(30); // documentado: se duplica (15 + 15), no se mantiene en 15
+    expect(retry.gemsEarned).toBe(5); // documentado: se vuelve a otorgar, no es 0
+  });
 });
 
 describe('GetProgressUseCase', () => {
