@@ -16,7 +16,7 @@ const { lesson, rewards, statsFixture, getLesson, completeLesson, getStats, getC
           options: [ { label: 'milk', imageUrl: null, correct: true }, { label: 'tea', imageUrl: null, correct: false } ] }
       ]
     } satisfies Lesson,
-    rewards: { xpEarned: 15, totalXp: 15, level: 1, streakCount: 1, freezeUsed: false, hearts: 5 },
+    rewards: { xpEarned: 15, totalXp: 15, level: 1, streakCount: 1, freezeUsed: false, hearts: 5, gemsEarned: 0, achievementsUnlocked: [] },
     statsFixture: {
       xp: 0, level: 1, xpIntoLevel: 0, xpToNextLevel: 100,
       streakCount: 0, streakFreezes: 0, gems: 0,
@@ -236,5 +236,23 @@ describe('LessonPlayerPage', () => {
     // fixture del beforeEach) y el ejercicio aparece.
     await userEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
     expect(await screen.findByRole('button', { name: 'water' })).toBeInTheDocument();
+  });
+
+  it('muestra un aviso por cada logro nuevo al completar la lección', async () => {
+    completeLesson.mockResolvedValue({
+      xpEarned: 15, totalXp: 15, level: 1, streakCount: 1, freezeUsed: false, hearts: 5,
+      gemsEarned: 5,
+      achievementsUnlocked: [{ id: 'streak-3', category: 'streak', threshold: 3, gems: 5 }]
+    });
+    renderWithProviders(<LessonPlayerPage />, { route: '/lesson/l1?lang=en', path: '/lesson/:lessonId' });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'water' }));
+    await userEvent.click(screen.getByRole('button', { name: 'agua' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+    await userEvent.click(screen.getByRole('button', { name: /milk/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Comprobar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+
+    expect(await screen.findByText('🏆 Nuevo logro: Racha de 3 días (+5💎)')).toBeInTheDocument();
   });
 });

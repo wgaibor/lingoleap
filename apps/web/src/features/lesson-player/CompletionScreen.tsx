@@ -1,4 +1,5 @@
 import type { LessonRewards } from '@lingoleap/core';
+import { ACHIEVEMENT_LABEL } from '../achievements/achievementLabels';
 
 export interface CompletionScreenProps {
   correctCount: number;
@@ -27,6 +28,11 @@ export function CompletionScreen({
           <p className="completion-xp">+{rewards.xpEarned} XP</p>
           <p>🔥 Racha: {rewards.streakCount} {rewards.streakCount === 1 ? 'día' : 'días'}</p>
           {rewards.freezeUsed && <p>🧊 Un congelador salvó tu racha</p>}
+          {rewards.achievementsUnlocked.map((achievement) => (
+            <p key={achievement.id} className="completion-achievement">
+              🏆 Nuevo logro: {ACHIEVEMENT_LABEL[achievement.id]} (+{achievement.gems}💎)
+            </p>
+          ))}
         </div>
       )}
       <p className="completion-screen-phrase">¡Gran trabajo! Cada lección te acerca más.</p>
