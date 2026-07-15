@@ -15,15 +15,20 @@ import { TranslateExercise } from './exercises/TranslateExercise';
 import { ListeningExercise } from './exercises/ListeningExercise';
 
 function renderExercise(exercise: Exercise, language: LearningLanguage, onResolve: (correct: boolean) => void) {
+  // key={exercise.id} fuerza a React a remontar el componente en cada cambio
+  // de ejercicio. Sin esto, dos ejercicios del mismo tipo consecutivos (p. ej.
+  // dos match-pairs seguidos) reutilizan la misma instancia: el estado interno
+  // de MatchPairsExercise (parejas ya emparejadas, ref de "ya resuelto") queda
+  // del ejercicio anterior y el nuevo nunca llega a resolverse.
   switch (exercise.type) {
     case 'image-select':
-      return <ImageSelectExercise exercise={exercise} onResolve={onResolve} />;
+      return <ImageSelectExercise key={exercise.id} exercise={exercise} onResolve={onResolve} />;
     case 'match-pairs':
-      return <MatchPairsExercise exercise={exercise} onResolve={onResolve} />;
+      return <MatchPairsExercise key={exercise.id} exercise={exercise} onResolve={onResolve} />;
     case 'translate':
-      return <TranslateExercise exercise={exercise} language={language} onResolve={onResolve} />;
+      return <TranslateExercise key={exercise.id} exercise={exercise} language={language} onResolve={onResolve} />;
     case 'listening':
-      return <ListeningExercise exercise={exercise} language={language} onResolve={onResolve} />;
+      return <ListeningExercise key={exercise.id} exercise={exercise} language={language} onResolve={onResolve} />;
   }
 }
 

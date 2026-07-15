@@ -255,4 +255,36 @@ describe('LessonPlayerPage', () => {
 
     expect(await screen.findByText('🏆 Nuevo logro: Racha de 3 días (+5💎)')).toBeInTheDocument();
   });
+
+  it('resuelve dos ejercicios de parejas consecutivos sin quedar atascado', async () => {
+    // Regresión: renderExercise no pasaba key={exercise.id}, así que al pasar
+    // de un match-pairs a otro React reutilizaba la misma instancia de
+    // MatchPairsExercise en vez de remontarla. El Set de parejas emparejadas y
+    // el ref que evita re-resolver quedaban con el estado del ejercicio
+    // anterior, y el segundo ejercicio nunca llegaba a "todas emparejadas":
+    // la lección se congelaba sin botón "Continuar".
+    const lessonWithTwoMatchPairs = {
+      id: 'l3', title: 'Lección 3', position: 3,
+      exercises: [
+        { id: 'e1', type: 'match-pairs', pairs: [{ left: 'water', right: 'agua' }] },
+        { id: 'e2', type: 'match-pairs', pairs: [{ left: 'milk', right: 'leche' }] }
+      ]
+    } satisfies Lesson;
+    getLesson.mockResolvedValue(lessonWithTwoMatchPairs);
+
+    renderWithProviders(<LessonPlayerPage />, { route: '/lesson/l3?lang=en', path: '/lesson/:lessonId' });
+
+    expect(await screen.findByText('Ejercicio 1 de 2')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'water' }));
+    await userEvent.click(screen.getByRole('button', { name: 'agua' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Continuar' }));
+
+    expect(await screen.findByText('Ejercicio 2 de 2')).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'milk' }));
+    await userEvent.click(screen.getByRole('button', { name: 'leche' }));
+    expect(await screen.findByText('¡Correcto!')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Continuar' }));
+
+    expect(await screen.findByText('¡Lección completada!')).toBeInTheDocument();
+  });
 });
