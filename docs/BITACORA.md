@@ -815,7 +815,40 @@ principal de la fase — ver abajo.
   de idempotencia — decidí documentarlo como deuda en vez de resolverlo a medias en este
   corte."
 
+### Smoke real (Task 9, 2026-07-15)
+
+Recorrido real en navegador (Claude in Chrome) contra la API/web levantadas en local, migración
+`0004_achievements.sql` ya corrida por el dueño del proyecto en Supabase.
+
+- `/achievements` renderiza los 8 logros agrupados por categoría (Racha / Lecciones completadas /
+  Nivel), con el estado de desbloqueo correcto (✅ / 🔒) y las gemas de cada uno.
+- Completar la última lección del único curso ingerido no dispara un logro nuevo (la racha ya
+  estaba en 3 de una sesión anterior) y las gemas **no se duplican** al reintentar tras un fallo
+  transitorio de guardado.
+- Cerrar sesión y volver a entrar conserva el logro desbloqueado y el conteo de gemas — confirma
+  que `user_achievements` persiste de verdad entre sesiones, no solo en el estado de React.
+- **Límite real del entorno, no del código:** el contenido ingerido en la Fase 1 tiene un solo
+  curso (Inglés A1) con 5 lecciones. `lessonsCompleted` nunca puede llegar a 10 en este entorno, así
+  que el logro `lessons-10` (y por lo tanto `lessons-50`/`lessons-100`) queda sin poder probarse de
+  extremo a extremo hasta que se re-ingiera más contenido — la lógica en sí está cubierta por los
+  tests unitarios de `unlockedAchievements`.
+
+**Bug real encontrado y corregido durante el smoke (no es de esta fase, es de la Fase 2):**
+`renderExercise` (`apps/web/src/features/lesson-player/LessonPlayerPage.tsx`) no le pasaba
+`key={exercise.id}` a los componentes de ejercicio. La única lección real disponible tiene tres
+ejercicios `match-pairs` seguidos (posiciones 3, 4 y 5), y ese fue justo el caso que ningún test
+existente cubría: todos los fixtures de `LessonPlayerPage.spec.tsx` tenían como mucho un
+`match-pairs` por lección. Sin `key`, React reutiliza la misma instancia de `MatchPairsExercise`
+entre dos ejercicios `match-pairs` consecutivos en vez de remontarla — el `Set` de parejas
+emparejadas y el `ref` que evita re-resolver quedan con el estado del ejercicio anterior, y el
+segundo ejercicio nunca llega a "todas emparejadas": la lección se congela sin botón "Continuar",
+bloqueando por completo terminarla. Corregido con TDD (test de regresión con dos `match-pairs`
+consecutivos + `key={exercise.id}` en los 4 tipos de ejercicio, commit `c8a4afb`). Es la misma
+categoría de lección que el "smoke real" de fases anteriores viene encontrando: un bug que ningún
+test unitario aislado detecta porque depende de la *secuencia* de ejercicios de una lección real,
+no de un ejercicio en aislamiento.
+
 ---
 
-*Próxima entrada: cierre de la Fase 3B (Task 9, smoke + merge) y, como sub-proyectos futuros
+*Próxima entrada: cierre de la Fase 3B (merge a `master`) y, como sub-proyectos futuros
 separados, el gasto de gemas en congeladores de racha comprados y la liga semanal con cron.*
