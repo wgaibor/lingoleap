@@ -5,6 +5,7 @@ import { RequireAuth } from './features/auth/RequireAuth';
 import { CoursesPage } from './features/course-path/CoursesPage';
 import { CoursePathPage } from './features/course-path/CoursePathPage';
 import { LessonPlayerPage } from './features/lesson-player/LessonPlayerPage';
+import { LeaguePage } from './features/league/LeaguePage';
 
 export default function App() {
   return (
@@ -41,6 +42,14 @@ export default function App() {
           element={
             <RequireAuth>
               <AchievementsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/league"
+          element={
+            <RequireAuth>
+              <LeaguePage />
             </RequireAuth>
           }
         />
