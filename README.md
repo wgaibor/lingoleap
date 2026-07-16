@@ -91,7 +91,7 @@ Requisitos: Node ≥ 22, pnpm ≥ 11.
 ```bash
 pnpm install
 pnpm build        # compila todos los paquetes y apps (Turborepo)
-pnpm test         # 78 tests (Vitest + msw + supertest + Testing Library)
+pnpm test         # 204 tests (Vitest + msw + supertest + Testing Library)
 pnpm lint
 
 # Backend (requiere apps/api/.env — ver apps/api/.env.example)
@@ -105,7 +105,9 @@ pnpm --filter @lingoleap/web dev
 ```
 
 Para la base de datos: crear un proyecto gratuito en Supabase y ejecutar en orden, en su SQL
-Editor, `supabase/migrations/0001_content.sql` y `supabase/migrations/0002_progress.sql`.
+Editor, `supabase/migrations/0001_content.sql`, `supabase/migrations/0002_progress.sql`,
+`supabase/migrations/0003_stats.sql`, `supabase/migrations/0004_achievements.sql` y
+`supabase/migrations/0005_league.sql`.
 
 ### Variables de entorno de la web
 
@@ -142,8 +144,8 @@ congelado → lint → build → tests. El badge de arriba refleja el estado de 
 - [x] **Fase 1** — Monorepo, backend hexagonal, pipeline de ingesta, API REST *(completa)*
 - [x] **Fase 2** — Web en React + Vite: auth, camino del curso, reproductor de lecciones *(completa)*
 - [ ] **Fase 3A** — Gamificación: XP, niveles, racha diaria y corazones *(smoke real completo — falta merge a master)*
-- [ ] **Fase 3B** — Gemas, congeladores de racha, ligas semanales, logros *(logros + gemas y
-      congelador comprable completos — falta liga semanal y el merge a master)*
+- [ ] **Fase 3B** — Gemas, congeladores de racha, ligas semanales, logros *(logros, gemas,
+      congelador comprable y liga semanal completos — falta el merge a master)*
 - [ ] **Fase 4** — App móvil con React Native + Expo (reusa `packages/core`)
 - [ ] **Fase 5** — Portugués e italiano (solo correr el pipeline) + despliegue
 
@@ -184,6 +186,22 @@ Las gemas se gastan en la **Tienda** de `/achievements`: un congelador de racha 
 (tope de 2 acumulados, `STREAK_FREEZE_PRICE`/`MAX_STREAK_FREEZES` en `packages/core`). La
 compra va por `POST /me/streak-freezes` sin body — precio y tope se validan y descuentan
 siempre en el servidor — y la `StatsBar` muestra el conteo 🧊 junto a las gemas.
+
+## Liga semanal (Fase 3B)
+
+Cada usuario que gana XP por primera vez en la semana (lunes a domingo UTC) entra automáticamente
+a una cohorte de hasta 30 miembros de su división — sin inscripción manual. Divisiones
+`Bronce → Plata → Oro → Diamante`; la división actual se deriva de la última membresía cerrada, no
+se almacena aparte. `GET /me/league` la expone y la web la muestra en `/league` y con un ítem 🏆 en
+la `StatsBar`.
+
+Al cierre de la semana (`closeLeagueWeek` en `packages/core`): ordena por XP semanal (desempate por
+quién llegó antes a ese XP), asciende el top 10, desciende los últimos 5 (con solape resuelto en
+cohortes chicas), y acredita gemas al podio (🥇 20💎, 🥈 10💎, 🥉 5💎). El cierre es **híbrido**:
+un cron semanal (`LeagueSchedulerService`, lunes 00:05 UTC) y un disparador perezoso dentro de
+`GET /me/league` que cierra cualquier cohorte vencida antes de responder — necesario porque, con
+$0 de infraestructura, el proceso no está vivo 24/7. `closed_at` hace que ambos disparadores sean
+idempotentes entre sí.
 
 ## Documentación
 
