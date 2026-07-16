@@ -142,9 +142,8 @@ congelado → lint → build → tests. El badge de arriba refleja el estado de 
 - [x] **Fase 1** — Monorepo, backend hexagonal, pipeline de ingesta, API REST *(completa)*
 - [x] **Fase 2** — Web en React + Vite: auth, camino del curso, reproductor de lecciones *(completa)*
 - [ ] **Fase 3A** — Gamificación: XP, niveles, racha diaria y corazones *(smoke real completo — falta merge a master)*
-- [ ] **Fase 3B** — Gemas, congeladores de racha, ligas semanales, logros *(primer corte
-      completo: logros + gemas — falta gastar gemas en congeladores comprados, liga semanal, y
-      el merge a master)*
+- [ ] **Fase 3B** — Gemas, congeladores de racha, ligas semanales, logros *(logros + gemas y
+      congelador comprable completos — falta liga semanal y el merge a master)*
 - [ ] **Fase 4** — App móvil con React Native + Expo (reusa `packages/core`)
 - [ ] **Fase 5** — Portugués e italiano (solo correr el pipeline) + despliegue
 
@@ -180,6 +179,11 @@ pantalla de fin de lección cuando se desbloquea uno nuevo.
 | 100 lecciones completadas | Lecciones | 100 lecciones | 💎 30 |
 | Nivel 5 alcanzado | Nivel | nivel 5 | 💎 5 |
 | Nivel 10 alcanzado | Nivel | nivel 10 | 💎 15 |
+
+Las gemas se gastan en la **Tienda** de `/achievements`: un congelador de racha cuesta 10💎
+(tope de 2 acumulados, `STREAK_FREEZE_PRICE`/`MAX_STREAK_FREEZES` en `packages/core`). La
+compra va por `POST /me/streak-freezes` sin body — precio y tope se validan y descuentan
+siempre en el servidor — y la `StatsBar` muestra el conteo 🧊 junto a las gemas.
 
 ## Documentación
 

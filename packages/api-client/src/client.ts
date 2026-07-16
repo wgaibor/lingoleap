@@ -54,6 +54,10 @@ export class LingoApiClient {
     return this.request('/me/achievements');
   }
 
+  buyStreakFreeze(): Promise<StatsSummary> {
+    return this.request('/me/streak-freezes', { method: 'POST' });
+  }
+
   async completeLesson(lessonId: string, options?: { errorCount?: number; date?: string }): Promise<LessonRewards> {
     const body = await this.request<{ completed: true; rewards: LessonRewards }>(
       `/progress/lessons/${lessonId}/complete`,

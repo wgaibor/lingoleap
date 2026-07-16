@@ -11,6 +11,7 @@ export function StatsBar() {
       <span className="stats-item" title="Racha de días seguidos">🔥 {data.streakCount}</span>
       <span className="stats-item" title="Corazones">❤️ {data.hearts}</span>
       <Link to="/achievements" className="stats-item stats-gems-link" title="Ver logros">💎 {data.gems}</Link>
+      <span className="stats-item" title="Congeladores de racha">🧊 {data.streakFreezes}</span>
       <span className="stats-item" title="Nivel">⚡ Nivel {data.level}</span>
       <div
         className="stats-level-bar"

@@ -693,6 +693,80 @@ principal de la fase — ver abajo.
 
 ---
 
+## Fase 3B — Congelador de racha comprable con gemas (2026-07-16)
+
+Sub-proyecto acotado que cierra la deuda declarada al final del primer corte de la Fase 3B:
+las gemas ya se ganaban (logros) pero no se podían gastar. Ahora `/achievements` tiene una
+sección "Tienda" con un único artículo: el congelador de racha (10💎, tope de 2 acumulados),
+y la `StatsBar` muestra el conteo 🧊. Spec:
+`docs/superpowers/specs/2026-07-15-streak-freeze-purchase-design.md`; plan:
+`docs/superpowers/plans/2026-07-15-streak-freeze-purchase.md`.
+
+### Decisiones técnicas y su porqué
+
+1. **Sin migración nueva.** `user_stats.gems` y `user_stats.streak_freezes` existen desde la
+   Fase 3A (`0003_stats.sql`); el congelador ya se *consumía* en `applyLessonDay` — solo
+   faltaba una forma de adquirirlo. La compra es una actualización de dos columnas de una fila
+   ya existente, así que agregar tablas habría sido inventar estructura sin necesidad.
+2. **Regla pura en `packages/core`** (`buyStreakFreeze` junto a `applyLessonDay` en
+   `logic/streak.ts`): precio y tope (`STREAK_FREEZE_PRICE = 10`, `MAX_STREAK_FREEZES = 2`)
+   viven una sola vez ahí. La web los importa para deshabilitar el botón y armar el copy, y el
+   backend los aplica de verdad — mismo patrón core↔backend de toda la gamificación. El
+   resultado es una unión discriminada (`{ ok: true, ... } | { ok: false, reason }`) con el
+   tope evaluado antes que las gemas, para que el mensaje al usuario sea el más útil cuando
+   fallan ambas condiciones.
+3. **`toStatsSummary` extraída de `GetStatsUseCase`** como función exportada y compartida con
+   `BuyStreakFreezeUseCase`, en vez de duplicar el cálculo de regeneración de corazones +
+   progreso de nivel en el caso de uso nuevo. Refactor sin cambio de comportamiento (el spec
+   existente quedó en verde sin tocarlo) hecho *antes* de escribir el caso de uso nuevo.
+4. **`POST /me/streak-freezes` sin body.** El cliente no envía precio, tope ni cantidad — no
+   hay nada que un cliente malicioso pueda manipular. El servidor lee `user_stats`, aplica
+   `buyStreakFreeze` y persiste; los rechazos son `DomainError`s nuevas (`INSUFFICIENT_GEMS`,
+   `STREAK_FREEZE_LIMIT_REACHED`) que el filtro global mapea a 400 y el api-client traduce a
+   `ApiError` tipada.
+5. **Compra de un solo clic, sin confirmación** (fijado en el spec §3): la compra es barata,
+   de bajo riesgo y reversible en la práctica (el congelador se consume solo si hace falta);
+   un modal de confirmación agregaría fricción sin proteger nada. El botón deshabilitado con
+   el motivo visible ("Necesitás 10💎." / "Ya tenés el máximo de congeladores.") comunica el
+   estado sin diálogo.
+6. **UI que solo refleja:** `useBuyStreakFreeze` es una mutation de TanStack Query que
+   invalida `['stats']` al éxito — la StatsBar y la Tienda se actualizan solas desde el
+   resumen recalculado por el servidor, sin estado local de gemas/congeladores en ningún
+   componente.
+
+### Problemas reales encontrados
+
+1. **Tests del API en rojo por el `dist` viejo de `@lingoleap/core`.** Tras implementar
+   `buyStreakFreeze` en core (tests de core en verde, porque vitest corre sobre `src/`), los
+   tests unit del API fallaron con `buyStreakFreeze is not a function`: `apps/api` resuelve
+   `@lingoleap/core` por su `dist/` compilado, no por `src/`. Bastó `pnpm --filter
+   @lingoleap/core build` antes de correr los tests del API. Es el mismo desnivel
+   src/dist que la web ya tiene mitigado vía `commonjsOptions.include` en Vite, pero del lado
+   Node/NestJS; conviene recordarlo cada vez que un cambio en core se consume desde el API en
+   la misma sesión.
+
+### Deuda técnica registrada
+
+- La compra no es transaccional a nivel de fila: `findByUser` + `save` sin lock optimista —
+  dos compras concurrentes del mismo usuario podrían leer el mismo estado y descontar gemas
+  una sola vez. Riesgo real bajísimo (un usuario, un botón que se deshabilita con
+  `isPending`), y es exactamente la misma limitación read-modify-write que ya arrastra
+  `CompleteLessonUseCase`; la solución de fondo (RPC/transacción en Postgres) está anotada
+  desde el primer corte de la 3B.
+- La Tienda vive dentro de `/achievements` en vez de una ruta propia — decisión del spec para
+  no abrir navegación nueva por un solo artículo; si aparecen más artículos comprables,
+  extraerla a `/store` será el momento de repensarla.
+
+### Números del sub-proyecto
+
+- 4 commits de código + 1 de documentación; TDD en todas las capas (RED→GREEN verificado en
+  core, use case, e2e supertest, api-client con msw y componentes con Testing Library).
+- 163 tests en el monorepo (145 → 163): 37 en core (+5), 77 en el API (+4 unit y +4 e2e), 8 en
+  api-client (+1), 41 en web (+4: 3 de Tienda y 1 de StatsBar ampliado).
+- Pendiente: smoke real end-to-end (Task 6 del plan) y el flujo de cierre (merge + CI).
+
+---
+
 ## Guía rápida de entrevista
 
 **"Háblame de un proyecto tuyo"** — guion de 60 segundos:

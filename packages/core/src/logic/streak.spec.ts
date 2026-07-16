@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyLessonDay } from './streak';
+import { applyLessonDay, buyStreakFreeze } from './streak';
 
 describe('applyLessonDay', () => {
   it('inicia la racha en 1 con la primera lección', () => {
@@ -30,5 +30,32 @@ describe('applyLessonDay', () => {
   it('reinicia a 1 si se saltaron 2+ días aunque haya congeladores', () => {
     expect(applyLessonDay({ count: 9, lastDate: '2026-07-08', freezes: 3 }, '2026-07-12'))
       .toEqual({ count: 1, lastDate: '2026-07-12', freezes: 3, freezeUsed: false });
+  });
+});
+
+describe('buyStreakFreeze', () => {
+  it('compra exitosa con gemas exactas: resta el precio y suma un congelador', () => {
+    expect(buyStreakFreeze({ gems: 10, streakFreezes: 0 }))
+      .toEqual({ ok: true, gems: 0, streakFreezes: 1 });
+  });
+
+  it('compra exitosa con más gemas de las necesarias', () => {
+    expect(buyStreakFreeze({ gems: 25, streakFreezes: 1 }))
+      .toEqual({ ok: true, gems: 15, streakFreezes: 2 });
+  });
+
+  it('rechaza con gemas insuficientes (un gema menos del precio)', () => {
+    expect(buyStreakFreeze({ gems: 9, streakFreezes: 0 }))
+      .toEqual({ ok: false, reason: 'insufficient-gems' });
+  });
+
+  it('rechaza al llegar al tope aunque sobren gemas', () => {
+    expect(buyStreakFreeze({ gems: 100, streakFreezes: 2 }))
+      .toEqual({ ok: false, reason: 'max-freezes-reached' });
+  });
+
+  it('prioriza el motivo de tope sobre el de gemas si ambos fallan a la vez', () => {
+    expect(buyStreakFreeze({ gems: 0, streakFreezes: 2 }))
+      .toEqual({ ok: false, reason: 'max-freezes-reached' });
   });
 });

@@ -385,3 +385,18 @@ a.lesson-node:active .lesson-node-circle-completed {
   color: var(--color-text-muted);
   font-weight: 700;
 }
+
+.store-section {
+  margin-bottom: var(--space-lg);
+}
+
+.store-status {
+  margin: 0 0 var(--space-sm);
+  color: var(--color-text-muted);
+}
+
+.store-reason {
+  margin: var(--space-sm) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
