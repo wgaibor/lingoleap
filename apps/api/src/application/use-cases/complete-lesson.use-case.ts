@@ -10,6 +10,7 @@ import type { CourseRepository } from '../ports/course.repository';
 import type { LeagueRepository } from '../ports/league.repository';
 import type { ProgressRepository } from '../ports/progress.repository';
 import type { StatsRepository } from '../ports/stats.repository';
+import { CloseLeagueWeekUseCase } from './close-league-week.use-case';
 
 export interface CompleteLessonInput {
   userId: string;
@@ -30,6 +31,7 @@ export class CompleteLessonUseCase {
       stats: StatsRepository;
       achievements: AchievementsRepository;
       league: LeagueRepository;
+      closeWeek?: CloseLeagueWeekUseCase;
       now?: () => string;
     }
   ) {}
@@ -82,7 +84,18 @@ export class CompleteLessonUseCase {
       await this.deps.achievements.unlock(input.userId, achievement.id, nowIso);
     }
 
-    const weekStart = weekStartOf(today);
+    // La semana de liga siempre se deriva del reloj del servidor (nunca de
+    // `today`, que puede venir del cliente): de lo contrario un cliente podría
+    // atrasar la fecha para crear/unirse a cohortes de semanas pasadas y
+    // farmear gemas de podio o ascensos. La racha, en cambio, sigue usando
+    // `today` a propósito (es local del usuario).
+    const weekStart = weekStartOf(nowIso.slice(0, 10));
+
+    const closeWeek =
+      this.deps.closeWeek ??
+      new CloseLeagueWeekUseCase({ league: this.deps.league, stats: this.deps.stats, now: this.deps.now });
+    await closeWeek.execute();
+
     const active = await this.deps.league.findMembership(input.userId, weekStart);
     if (active) {
       await this.deps.league.saveMembership({

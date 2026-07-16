@@ -99,9 +99,13 @@ import { StatsController } from './stats.controller';
         progress: ProgressRepository,
         stats: StatsRepository,
         achievements: AchievementsRepository,
-        league: LeagueRepository
-      ) => new CompleteLessonUseCase({ courses, progress, stats, achievements, league }),
-      inject: [COURSE_REPOSITORY, PROGRESS_REPOSITORY, STATS_REPOSITORY, ACHIEVEMENTS_REPOSITORY, LEAGUE_REPOSITORY]
+        league: LeagueRepository,
+        closeWeek: CloseLeagueWeekUseCase
+      ) => new CompleteLessonUseCase({ courses, progress, stats, achievements, league, closeWeek }),
+      inject: [
+        COURSE_REPOSITORY, PROGRESS_REPOSITORY, STATS_REPOSITORY, ACHIEVEMENTS_REPOSITORY,
+        LEAGUE_REPOSITORY, CloseLeagueWeekUseCase
+      ]
     },
     {
       provide: GetProgressUseCase,

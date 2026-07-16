@@ -9,6 +9,7 @@ import type { LeagueCohort, LeagueMembership } from '../../domain/league';
 import type { UserStats } from '../../domain/user-stats';
 import { LessonNotFoundError } from '../../domain/errors';
 import { CompleteLessonUseCase } from './complete-lesson.use-case';
+import { CloseLeagueWeekUseCase } from './close-league-week.use-case';
 import { GetProgressUseCase } from './get-progress.use-case';
 
 const lesson: Lesson = { id: 'l1', title: 'Lección 1', position: 1, exercises: [
@@ -248,7 +249,7 @@ describe('CompleteLessonUseCase', () => {
 
   it('crea la membresía de liga en bronce con el XP de la primera lección de la semana', async () => {
     const league = new FakeLeague();
-    const useCase = makeUseCase({ league });
+    const useCase = makeUseCase({ league, now: () => '2026-07-16T12:00:00.000Z' });
     await useCase.execute({ userId: 'u1', userEmail: 'ana@test.com', lessonId: lesson.id, errorCount: 0, clientDate: '2026-07-16' });
     expect(league.cohorts).toHaveLength(1);
     expect(league.cohorts[0]).toMatchObject({ division: 'bronze', weekStart: '2026-07-13' });
@@ -257,12 +258,62 @@ describe('CompleteLessonUseCase', () => {
 
   it('acumula XP en la membresía existente de la semana sin crear otra cohorte', async () => {
     const league = new FakeLeague();
-    const useCase = makeUseCase({ league });
+    const useCase = makeUseCase({ league, now: () => '2026-07-16T12:00:00.000Z' });
     await useCase.execute({ userId: 'u1', userEmail: 'ana@test.com', lessonId: lesson.id, errorCount: 0, clientDate: '2026-07-16' });
     await useCase.execute({ userId: 'u1', userEmail: 'ana@test.com', lessonId: lesson.id, errorCount: 5, clientDate: '2026-07-16' });
     expect(league.cohorts).toHaveLength(1);
     expect(league.memberships).toHaveLength(1);
     expect(league.memberships[0].weeklyXp).toBe(25); // 15 + 10
+  });
+
+  it('usa la semana ISO del UTC del servidor para la liga, no la fecha del cliente (evita cohortes retroactivas)', async () => {
+    // NOW = 2026-07-16T12:00:00.000Z -> semana actual (lunes) = 2026-07-13.
+    // Un cliente que envía una fecha atrasada (p. ej. una semana antes) no debe
+    // poder crear/unirse a una cohorte de una semana pasada.
+    const league = new FakeLeague();
+    const useCase = makeUseCase({ league, now: () => '2026-07-16T12:00:00.000Z' });
+    await useCase.execute({
+      userId: 'u1', userEmail: 'ana@test.com', lessonId: lesson.id, errorCount: 0,
+      clientDate: '2026-07-06'
+    });
+    expect(league.cohorts).toHaveLength(1);
+    expect(league.cohorts[0]).toMatchObject({ weekStart: '2026-07-13' });
+  });
+
+  it('cierra en frío una cohorte expirada pendiente de cierre antes de inscribir en la nueva semana, reflejando el ascenso', async () => {
+    // El usuario quedó 1º (único miembro) en una cohorte bronce ya vencida
+    // pero que nadie cerró todavía (sin cron, cierre perezoso). Al completar
+    // una lección en la semana nueva, el use case debe cerrar esa cohorte
+    // vieja (acreditando las gemas del podio una sola vez) y crear la
+    // membresía nueva ya en la división ascendida (silver), no en bronce.
+    const league = new FakeLeague();
+    const stats = new FakeStats({
+      userId: 'u1', xp: 0, streakCount: 0, lastLessonDate: null,
+      hearts: 5, heartsUpdatedAt: NOW, gems: 0, streakFreezes: 0
+    });
+    const oldCohort = await league.createCohort('bronze', '2026-07-06');
+    await league.saveMembership({
+      cohortId: oldCohort.id, userId: 'u1', displayName: 'ana', weeklyXp: 50, lastXpAt: '2026-07-08T00:00:00.000Z', result: null
+    });
+    const closeWeek = new CloseLeagueWeekUseCase({ league, stats, now: () => '2026-07-16T12:00:00.000Z' });
+    const useCase = new CompleteLessonUseCase({
+      courses, progress: new FakeProgress(), stats, achievements: new FakeAchievements(),
+      league, closeWeek, now: () => '2026-07-16T12:00:00.000Z'
+    });
+
+    await useCase.execute({
+      userId: 'u1', userEmail: 'ana@test.com', lessonId: lesson.id, errorCount: 0,
+      clientDate: '2026-07-16'
+    });
+
+    expect(league.cohorts.find((c) => c.id === oldCohort.id)?.closedAt).not.toBeNull();
+    const newMembership = league.memberships.find((m) => m.cohortId !== oldCohort.id && m.userId === 'u1');
+    expect(newMembership).toBeDefined();
+    const newCohort = league.cohorts.find((c) => c.id === newMembership!.cohortId);
+    expect(newCohort).toMatchObject({ division: 'silver', weekStart: '2026-07-13' });
+
+    const savedStats = stats.saved[stats.saved.length - 1];
+    expect(savedStats.gems).toBe(20); // gemas de podio (1er lugar) acreditadas una sola vez
   });
 });
 

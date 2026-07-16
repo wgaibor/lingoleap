@@ -19,6 +19,7 @@ describe('StatsBar', () => {
     expect(await screen.findByText('🔥 3')).toBeInTheDocument();
     expect(screen.getByText('❤️ 4')).toBeInTheDocument();
     expect(screen.getByText('💎 0')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /💎 0/ })).toHaveAttribute('href', '/achievements');
     expect(screen.getByText('🧊 1')).toBeInTheDocument();
     expect(await screen.findByText('🏆 Plata')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /🏆 Plata/ })).toHaveAttribute('href', '/league');

@@ -27,3 +27,6 @@ create policy "league_cohorts_select_authenticated"
 create policy "league_memberships_select_authenticated"
   on public.league_memberships for select
   using (auth.role() = 'authenticated');
+
+create index if not exists league_memberships_user_id_idx on public.league_memberships (user_id);
+create index if not exists league_cohorts_open_week_idx on public.league_cohorts (week_start) where closed_at is null;
