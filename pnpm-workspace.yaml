@@ -5,3 +5,16 @@ allowBuilds:
   '@swc/core': true
   esbuild: false
   msw: false
+  unrs-resolver: false
+# apps/mobile introduce react@19 / @types/react@19 al workspace. pnpm hoistea @types/* a un
+# node_modules/.pnpm/node_modules compartido; sin este pin, react-router-dom (usado solo por
+# apps/web, que sigue en React 18) resuelve los tipos de React contra la versión 19 hoisteada
+# y rompe el build de apps/web (TS2786 "cannot be used as a JSX component"). Le fuerza su
+# propia copia de @types/react en la línea 18.x.
+packageExtensions:
+  react-router-dom:
+    dependencies:
+      '@types/react': '^18.3.0'
+  react-router:
+    dependencies:
+      '@types/react': '^18.3.0'
