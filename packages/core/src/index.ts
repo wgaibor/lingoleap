@@ -8,4 +8,5 @@ export * from './logic/xp';
 export * from './logic/streak';
 export * from './logic/hearts';
 export * from './logic/achievements';
+export * from './logic/league';
 export * from './stats';
