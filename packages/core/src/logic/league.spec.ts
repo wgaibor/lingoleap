@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { divisionAfter, leagueZone, weekStartOf } from './league';
+import { closeLeagueWeek, divisionAfter, leagueZone, weekStartOf } from './league';
 
 describe('weekStartOf', () => {
   it('devuelve el mismo día si es lunes', () => {
@@ -64,5 +64,50 @@ describe('leagueZone', () => {
   it('en cohortes chicas el ascenso gana al solaparse las zonas', () => {
     expect(leagueZone(3, 4, 'silver')).toBe('promotion');
     expect(leagueZone(4, 4, 'silver')).toBe('promotion');
+  });
+});
+
+describe('closeLeagueWeek', () => {
+  const member = (userId: string, weeklyXp: number, lastXpAt = '2026-07-15T10:00:00.000Z') =>
+    ({ userId, weeklyXp, lastXpAt });
+
+  it('ordena por XP, asciende al top 10, desciende a los últimos 5 y premia al podio', () => {
+    const members = Array.from({ length: 30 }, (_, i) => member(`u${i + 1}`, 300 - i * 10));
+    const outcomes = closeLeagueWeek(members, 'silver');
+    expect(outcomes[0]).toEqual({ userId: 'u1', position: 1, result: 'promoted', gemsAwarded: 20 });
+    expect(outcomes[1]).toEqual({ userId: 'u2', position: 2, result: 'promoted', gemsAwarded: 10 });
+    expect(outcomes[2]).toEqual({ userId: 'u3', position: 3, result: 'promoted', gemsAwarded: 5 });
+    expect(outcomes[9].result).toBe('promoted');
+    expect(outcomes[10].result).toBe('stayed');
+    expect(outcomes[24].result).toBe('stayed');
+    expect(outcomes[25].result).toBe('demoted');
+    expect(outcomes[29].result).toBe('demoted');
+  });
+
+  it('desempata por quién llegó antes a ese XP (lastXpAt ascendente)', () => {
+    const outcomes = closeLeagueWeek(
+      [
+        member('tarde', 100, '2026-07-15T20:00:00.000Z'),
+        member('temprano', 100, '2026-07-15T08:00:00.000Z')
+      ],
+      'bronze'
+    );
+    expect(outcomes[0].userId).toBe('temprano');
+    expect(outcomes[1].userId).toBe('tarde');
+  });
+
+  it('en bronce nadie desciende y en diamante nadie asciende', () => {
+    const members = Array.from({ length: 30 }, (_, i) => member(`u${i + 1}`, 300 - i * 10));
+    expect(closeLeagueWeek(members, 'bronze').every((o) => o.result !== 'demoted')).toBe(true);
+    expect(closeLeagueWeek(members, 'diamond').every((o) => o.result !== 'promoted')).toBe(true);
+  });
+
+  it('en cohortes chicas todos ascienden si caben en el top 10 (nadie desciende doble)', () => {
+    const outcomes = closeLeagueWeek(
+      [member('a', 30), member('b', 20), member('c', 10)],
+      'silver'
+    );
+    expect(outcomes.map((o) => o.result)).toEqual(['promoted', 'promoted', 'promoted']);
+    expect(outcomes.map((o) => o.gemsAwarded)).toEqual([20, 10, 5]);
   });
 });

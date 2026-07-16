@@ -35,3 +35,50 @@ export function leagueZone(position: number, cohortSize: number, division: Leagu
   }
   return 'none';
 }
+
+export interface LeagueMemberInput {
+  userId: string;
+  weeklyXp: number;
+  lastXpAt: string;
+}
+
+export interface LeagueMemberOutcome {
+  userId: string;
+  position: number;
+  result: LeagueMemberResult;
+  gemsAwarded: number;
+}
+
+export function closeLeagueWeek(
+  members: LeagueMemberInput[],
+  division: LeagueDivision
+): LeagueMemberOutcome[] {
+  const sorted = [...members].sort(
+    (a, b) => b.weeklyXp - a.weeklyXp || a.lastXpAt.localeCompare(b.lastXpAt)
+  );
+  return sorted.map((m, index) => {
+    const position = index + 1;
+    const zone = leagueZone(position, sorted.length, division);
+    const result: LeagueMemberResult =
+      zone === 'promotion' ? 'promoted' : zone === 'demotion' ? 'demoted' : 'stayed';
+    return { userId: m.userId, position, result, gemsAwarded: LEAGUE_PODIUM_GEMS[index] ?? 0 };
+  });
+}
+
+export interface LeagueStanding {
+  position: number;
+  displayName: string;
+  weeklyXp: number;
+  isMe: boolean;
+  zone: LeagueZone;
+}
+
+export interface LeagueCohortSummary {
+  weekStart: string;
+  standings: LeagueStanding[];
+}
+
+export interface LeagueSummary {
+  division: LeagueDivision;
+  cohort: LeagueCohortSummary | null;
+}
