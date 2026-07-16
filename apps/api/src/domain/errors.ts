@@ -19,3 +19,11 @@ export class LessonNotFoundError extends DomainError {
 export class InvalidContentError extends DomainError {
   readonly code = 'INVALID_CONTENT';
 }
+
+export class InsufficientGemsError extends DomainError {
+  readonly code = 'INSUFFICIENT_GEMS';
+}
+
+export class StreakFreezeLimitReachedError extends DomainError {
+  readonly code = 'STREAK_FREEZE_LIMIT_REACHED';
+}

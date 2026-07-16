@@ -5,6 +5,7 @@ import { AUTH_VERIFIER } from '../application/ports/auth-verifier.port';
 import { COURSE_REPOSITORY, type CourseRepository } from '../application/ports/course.repository';
 import { PROGRESS_REPOSITORY, type ProgressRepository } from '../application/ports/progress.repository';
 import { STATS_REPOSITORY, type StatsRepository } from '../application/ports/stats.repository';
+import { BuyStreakFreezeUseCase } from '../application/use-cases/buy-streak-freeze.use-case';
 import { CompleteLessonUseCase } from '../application/use-cases/complete-lesson.use-case';
 import { GetAchievementsUseCase } from '../application/use-cases/get-achievements.use-case';
 import { GetCourseUseCase } from '../application/use-cases/get-course.use-case';
@@ -82,6 +83,11 @@ import { StatsController } from './stats.controller';
     {
       provide: GetStatsUseCase,
       useFactory: (stats: StatsRepository) => new GetStatsUseCase({ stats }),
+      inject: [STATS_REPOSITORY]
+    },
+    {
+      provide: BuyStreakFreezeUseCase,
+      useFactory: (stats: StatsRepository) => new BuyStreakFreezeUseCase({ stats }),
       inject: [STATS_REPOSITORY]
     },
     {
