@@ -1,55 +1,22 @@
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { LeagueDivision } from '@lingoleap/core';
+import { weekStartOf } from '@lingoleap/core';
 import type { AuthenticatedUser, AuthVerifier } from '../application/ports/auth-verifier.port';
 import { AUTH_VERIFIER } from '../application/ports/auth-verifier.port';
-import type { AchievementsRepository } from '../application/ports/achievements.repository';
-import { ACHIEVEMENTS_REPOSITORY } from '../application/ports/achievements.repository';
-import type { ProgressRepository } from '../application/ports/progress.repository';
-import { PROGRESS_REPOSITORY } from '../application/ports/progress.repository';
-import { COURSE_REPOSITORY, type CourseRepository } from '../application/ports/course.repository';
-import { STATS_REPOSITORY, type StatsRepository } from '../application/ports/stats.repository';
 import { LEAGUE_REPOSITORY, type LeagueRepository } from '../application/ports/league.repository';
+import { STATS_REPOSITORY, type StatsRepository } from '../application/ports/stats.repository';
 import type { LeagueCohort, LeagueMembership } from '../domain/league';
 import type { UserStats } from '../domain/user-stats';
-import type { Lesson, LeagueDivision } from '@lingoleap/core';
 import { ContentApiModule } from './content-api.module';
 import { DomainExceptionFilter } from './domain-exception.filter';
-
-const lesson: Lesson = { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', title: 'L1', position: 1, exercises: [
-  { id: 'e1', type: 'match-pairs', pairs: [{ left: 'water', right: 'agua' }] }
-] };
 
 class FakeVerifier implements AuthVerifier {
   async verifyToken(token: string): Promise<AuthenticatedUser | null> {
     return token === 'valid-token' ? { id: 'user-1', email: 'a@b.com' } : null;
   }
-}
-
-class FakeProgress implements ProgressRepository {
-  saved: string[] = [];
-  async markLessonCompleted(_userId: string, lessonId: string): Promise<void> { this.saved.push(lessonId); }
-  async listCompletedLessonIds(): Promise<string[]> { return this.saved; }
-}
-
-class FakeCourses implements CourseRepository {
-  async saveCourse(): Promise<void> {}
-  async findByLanguageAndLevel(): Promise<null> { return null; }
-  async listSummaries(): Promise<[]> { return []; }
-  async findLessonById(id: string): Promise<Lesson | null> { return id === lesson.id ? lesson : null; }
-}
-
-class FakeStats implements StatsRepository {
-  stored: UserStats | null = null;
-  async findByUser(): Promise<UserStats | null> { return this.stored; }
-  async save(stats: UserStats): Promise<void> { this.stored = stats; }
-}
-
-class FakeAchievements implements AchievementsRepository {
-  unlocked: string[] = [];
-  async listUnlockedIds(): Promise<string[]> { return this.unlocked; }
-  async unlock(_userId: string, achievementId: string): Promise<void> { this.unlocked.push(achievementId); }
 }
 
 class FakeLeague implements LeagueRepository {
@@ -94,14 +61,21 @@ class FakeLeague implements LeagueRepository {
     return this.cohorts.filter((c) => c.closedAt === null && c.weekStart < currentWeekStart);
   }
   async closeCohort(cohortId: string, closedAt: string) {
-    const c = this.cohorts.find((x) => x.id === cohortId);
-    if (c) c.closedAt = closedAt;
+    const cohort = this.cohorts.find((c) => c.id === cohortId);
+    if (cohort) cohort.closedAt = closedAt;
   }
 }
 
-describe('API de progreso', () => {
+class FakeStats implements StatsRepository {
+  rows = new Map<string, UserStats>();
+  async findByUser(userId: string): Promise<UserStats | null> { return this.rows.get(userId) ?? null; }
+  async save(stats: UserStats): Promise<void> { this.rows.set(stats.userId, stats); }
+}
+
+describe('API de liga', () => {
   let app: INestApplication;
-  const progress = new FakeProgress();
+  const league = new FakeLeague();
+  const stats = new FakeStats();
 
   beforeAll(async () => {
     process.env.SUPABASE_URL = 'https://stub.supabase.co';
@@ -109,11 +83,8 @@ describe('API de progreso', () => {
     process.env.PEXELS_API_KEY = 'stub';
     const moduleRef = await Test.createTestingModule({ imports: [ContentApiModule] })
       .overrideProvider(AUTH_VERIFIER).useValue(new FakeVerifier())
-      .overrideProvider(PROGRESS_REPOSITORY).useValue(progress)
-      .overrideProvider(COURSE_REPOSITORY).useValue(new FakeCourses())
-      .overrideProvider(STATS_REPOSITORY).useValue(new FakeStats())
-      .overrideProvider(ACHIEVEMENTS_REPOSITORY).useValue(new FakeAchievements())
-      .overrideProvider(LEAGUE_REPOSITORY).useValue(new FakeLeague())
+      .overrideProvider(LEAGUE_REPOSITORY).useValue(league)
+      .overrideProvider(STATS_REPOSITORY).useValue(stats)
       .compile();
     app = moduleRef.createNestApplication();
     app.useGlobalFilters(new DomainExceptionFilter());
@@ -122,36 +93,42 @@ describe('API de progreso', () => {
 
   afterAll(async () => { await app.close(); });
 
+  beforeEach(() => {
+    league.cohorts = [];
+    league.memberships = [];
+    stats.rows.clear();
+  });
+
   it('rechaza sin token', async () => {
-    const res = await request(app.getHttpServer())
-      .post(`/progress/lessons/${lesson.id}/complete`).expect(401);
-    expect(res.body.code).toBe('UNAUTHORIZED');
+    await request(app.getHttpServer()).get('/me/league').expect(401);
   });
 
-  it('completa una lección con token válido y devuelve recompensas', async () => {
+  it('devuelve bronce sin cohorte para un usuario nuevo', async () => {
     const res = await request(app.getHttpServer())
-      .post(`/progress/lessons/${lesson.id}/complete`)
-      .set('Authorization', 'Bearer valid-token')
-      .send({ errorCount: 2, date: '2026-07-12' })
-      .expect(201);
-    expect(res.body.completed).toBe(true);
-    expect(res.body.rewards).toMatchObject({ xpEarned: 13, streakCount: 1, hearts: 3 });
-    expect(progress.saved).toEqual([lesson.id]);
-  });
-
-  it('404 si la lección no existe', async () => {
-    const res = await request(app.getHttpServer())
-      .post('/progress/lessons/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb/complete')
-      .set('Authorization', 'Bearer valid-token')
-      .expect(404);
-    expect(res.body.code).toBe('LESSON_NOT_FOUND');
-  });
-
-  it('lista el progreso del usuario', async () => {
-    const res = await request(app.getHttpServer())
-      .get('/progress/lessons')
+      .get('/me/league')
       .set('Authorization', 'Bearer valid-token')
       .expect(200);
-    expect(res.body).toEqual({ lessonIds: [lesson.id] });
+    expect(res.body).toEqual({ division: 'bronze', cohort: null });
+  });
+
+  it('devuelve la tabla de la cohorte activa con el usuario marcado', async () => {
+    const cohort = await league.createCohort('bronze', weekStartOf(new Date().toISOString().slice(0, 10)));
+    await league.saveMembership({ cohortId: cohort.id, userId: 'user-1', displayName: 'ana', weeklyXp: 15, lastXpAt: new Date().toISOString(), result: null });
+    const res = await request(app.getHttpServer())
+      .get('/me/league')
+      .set('Authorization', 'Bearer valid-token')
+      .expect(200);
+    expect(res.body.cohort.standings[0]).toMatchObject({ position: 1, displayName: 'ana', isMe: true });
+  });
+
+  it('cierra perezosamente una cohorte vencida y acredita el podio', async () => {
+    const cohort = await league.createCohort('bronze', '2026-01-05'); // semana pasada segura
+    await league.saveMembership({ cohortId: cohort.id, userId: 'user-1', displayName: 'ana', weeklyXp: 30, lastXpAt: '2026-01-06T10:00:00.000Z', result: null });
+    const res = await request(app.getHttpServer())
+      .get('/me/league')
+      .set('Authorization', 'Bearer valid-token')
+      .expect(200);
+    expect(res.body).toEqual({ division: 'silver', cohort: null });
+    expect(stats.rows.get('user-1')?.gems).toBe(20);
   });
 });

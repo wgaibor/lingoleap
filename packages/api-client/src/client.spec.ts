@@ -81,6 +81,27 @@ describe('LingoApiClient', () => {
     expect(stats.gems).toBe(0);
   });
 
+  it('getLeague envía el token y devuelve el resumen de la liga', async () => {
+    server.use(
+      http.get(`${BASE}/me/league`, ({ request }) => {
+        expect(request.headers.get('authorization')).toBe('Bearer token-123');
+        return HttpResponse.json({
+          division: 'silver',
+          cohort: {
+            weekStart: '2026-07-13',
+            standings: [
+              { position: 1, displayName: 'ana', weeklyXp: 40, isMe: true, zone: 'promotion' }
+            ]
+          }
+        });
+      })
+    );
+    const client = new LingoApiClient({ baseUrl: BASE, getAccessToken: async () => 'token-123' });
+    const league = await client.getLeague();
+    expect(league.division).toBe('silver');
+    expect(league.cohort?.standings[0].isMe).toBe(true);
+  });
+
   it('getAchievements envía el token y devuelve el catálogo con su estado', async () => {
     server.use(
       http.get(`${BASE}/me/achievements`, ({ request }) => {

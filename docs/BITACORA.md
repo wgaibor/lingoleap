@@ -767,6 +767,93 @@ y la `StatsBar` muestra el conteo 🧊. Spec:
 
 ---
 
+## Fase 3B — Liga semanal (2026-07-16)
+
+Último sub-proyecto pendiente de la Fase 3B: cierra la gamificación social del spec original
+(`2026-07-10-lingoleap-design.md`, §Gamificación) con cohortes de hasta 30 usuarios, divisiones
+Bronce → Plata → Oro → Diamante y cierre semanal con ascensos, descensos y podio en gemas. Spec:
+`docs/superpowers/specs/2026-07-16-weekly-league-design.md`; plan de 10 tareas ejecutado en la
+rama `feature/weekly-league`.
+
+### Decisiones técnicas y su porqué
+
+1. **Cierre híbrido cron + perezoso.** El spec original pide un cierre semanal real, pero con
+   $0 de infraestructura el proceso backend no está vivo 24/7 (Render free tier duerme). Un solo
+   cron (`@nestjs/schedule`, lunes 00:05 UTC) honra el diseño, pero si el proceso estaba dormido
+   en ese instante la cohorte quedaría vencida indefinidamente — por eso `GetLeagueUseCase`
+   también revisa, al leer, si la cohorte del usuario venció y dispara el mismo cierre antes de
+   responder. Una sola función (`CloseLeagueWeekUseCase`), dos disparadores, hecha idempotente
+   por la columna `closed_at`.
+2. **División derivada, no almacenada.** La división actual del usuario se calcula a partir de la
+   última `league_membership` cerrada en vez de vivir en una columna propia de `user_stats` —
+   evita un punto más de desincronización y hace que Bronce sea, sin código extra, el default de
+   quien nunca jugó.
+3. **`display_name` congelado al ingresar a la cohorte.** Se deriva del email (parte antes de la
+   `@`) y se guarda en `league_memberships` en el momento de la inscripción, no se recalcula al
+   leer. Esto evita joins contra Supabase Auth solo para pintar una tabla, y evita exponer el
+   email completo de otros usuarios en el leaderboard.
+4. **Excepción de capas: el scheduler vive en `presentation/`.** `LeagueSchedulerService` usa el
+   decorador `@Cron` de `@nestjs/schedule`, que exige el contenedor de NestJS — igual que los
+   controllers y el `AuthGuard`, no puede vivir en `application/` (TypeScript puro sin NestJS).
+   Es la misma excepción ya aceptada para el resto de la capa de presentación, aplicada aquí a un
+   disparador en vez de a un endpoint HTTP.
+
+### Desviaciones aprobadas durante la implementación
+
+- **`userEmail ?? userId` como fallback del `display_name`** (Task 4): el email de Supabase Auth
+  puede venir `null` en el JWT según el flujo de registro; en ese caso el leaderboard muestra el
+  UUID completo del usuario en vez de un nombre. Es una degradación visible pero aceptable — no
+  bloquea el ingreso a la cohorte ni el cierre — y quedó documentada en el momento como
+  desviación aprobada, no como bug.
+- **`--color-success` no existe en `@lingoleap/tokens`** (Task 8): la web usó `--color-primary`
+  para las filas de ascenso en la tabla de `/league`, ya que el token de éxito no está definido en
+  `packages/tokens`. Añadir un token `--color-success` real queda como mejora futura si aparecen
+  más usos de "estado positivo" en la UI.
+- **El `<h2>` del título de división necesitó un `<span>` interno** (Task 8) para que
+  `findByText` de Testing Library pudiera matchear el nombre de la división sin acoplarse al
+  texto completo del encabezado (que combina label fijo + división dinámica).
+
+### Problemas reales encontrados
+
+- Sin incidentes de ejecución nuevos más allá de las desviaciones ya listadas: las 8 tareas de
+  código (1-8) llegaron a review limpia o con solo *minors* aceptados sin cambios (tests de
+  adaptador no cubiertos directamente, casos de error sin test explícito en algunos casos de uso
+  — consistente con la convención ya establecida en el resto del repo de no duplicar cobertura
+  que el e2e ya ejercita).
+
+### Deuda técnica registrada
+
+- **Cierre no idempotente a mitad de bucle** (diferido explícitamente por el usuario en la Task
+  5): `CloseLeagueWeekUseCase` itera las cohortes vencidas, acredita las gemas del podio y recién
+  después marca `closed_at`. Si el proceso muere entre esas dos escrituras para una cohorte dada,
+  un reintento (cron siguiente o lectura perezoza) volvería a acreditar las gemas de esa misma
+  cohorte — doble podio. Es la misma familia de deuda read-modify-write que ya arrastran
+  `CompleteLessonUseCase` y la compra de congeladores de racha; la solución de fondo es la misma
+  en los tres casos: una transacción o RPC de Postgres que agrupe lectura, escritura y marca de
+  estado en una sola operación atómica. Riesgo real bajo en este caso (requiere que el proceso
+  muera en una ventana muy angosta, entre dos escrituras consecutivas), pero queda anotado junto
+  a la deuda ya existente para resolverse en conjunto. Dos disparadores concurrentes (el cron y el
+  cierre perezoso lanzado en paralelo desde `CompleteLessonUseCase`) comparten la misma causa raíz
+  (sin transacción) y podrían acreditar el podio dos veces; queda cubierto por el mismo fix de
+  fondo (RPC/transacción en Postgres).
+- **Pre-smoke pendiente:** correr `supabase/migrations/0005_league.sql` en el SQL Editor de
+  Supabase antes de cualquier smoke real end-to-end de la liga (igual que las migraciones
+  anteriores, no se aplica sola).
+
+### Números del sub-proyecto
+
+- 9 commits de código (Tasks 1-8, incluyendo un fix de tests en Task 3) + 1 de documentación;
+  TDD en todas las capas (RED→GREEN en `packages/core`, casos de uso con fakes, e2e supertest,
+  api-client con msw y componentes con Testing Library).
+- 204 tests en el monorepo (163 → 204, +41): 55 en core (+18, `logic/league.spec.ts`), 96 en el
+  API (+19: dominio/puerto/adaptador de liga, `close-league-week`, `get-league`, e2e de
+  `league-api`), 9 en api-client (+1, `getLeague`), 44 en web (+3: `LeaguePage` y el ítem de liga
+  en `StatsBar`).
+- Pendiente: smoke real end-to-end (requiere correr `0005_league.sql` primero) y el merge de la
+  Fase 3B completa a `master`.
+
+---
+
 ## Guía rápida de entrevista
 
 **"Háblame de un proyecto tuyo"** — guion de 60 segundos:
@@ -776,7 +863,8 @@ y la `StatsBar` muestra el conteo 🧊. Spec:
 > abiertos: listas de frecuencia para el currículo, Tatoeba para oraciones reales, MyMemory
 > para traducciones y Pexels para imágenes. El backend es NestJS con arquitectura hexagonal:
 > el dominio es TypeScript puro y las integraciones externas son adaptadores intercambiables
-> detrás de interfaces, lo que me dejó testear todo con fakes — 39 tests escritos con TDD.
+> detrás de interfaces, lo que me dejó testear todo con fakes — 204 tests en el monorepo,
+> escritos con TDD.
 > El contenido se ingesta offline a Postgres (Supabase), así los rate limits de las APIs
 > gratuitas nunca tocan al usuario. Todo corre en CI con GitHub Actions. Encima construí el
 > cliente web en React: TanStack Query para el estado de servidor, zustand para el estado de

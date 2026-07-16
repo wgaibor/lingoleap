@@ -1,8 +1,11 @@
 import { Link } from 'react-router-dom';
+import { DIVISION_LABEL } from '../league/divisionLabels';
+import { useLeague } from '../league/queries';
 import { useStats } from './queries';
 
 export function StatsBar() {
   const { data } = useStats();
+  const { data: league } = useLeague();
   if (!data) return null;
   const levelTotal = data.xpIntoLevel + data.xpToNextLevel;
   const percent = levelTotal === 0 ? 0 : Math.round((data.xpIntoLevel / levelTotal) * 100);
@@ -12,6 +15,11 @@ export function StatsBar() {
       <span className="stats-item" title="Corazones">❤️ {data.hearts}</span>
       <Link to="/achievements" className="stats-item stats-gems-link" title="Ver logros">💎 {data.gems}</Link>
       <span className="stats-item" title="Congeladores de racha">🧊 {data.streakFreezes}</span>
+      {league && (
+        <Link to="/league" className="stats-item stats-league-link" title="Ver liga">
+          🏆 {DIVISION_LABEL[league.division]}
+        </Link>
+      )}
       <span className="stats-item" title="Nivel">⚡ Nivel {data.level}</span>
       <div
         className="stats-level-bar"

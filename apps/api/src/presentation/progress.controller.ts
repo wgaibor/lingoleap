@@ -25,6 +25,7 @@ export class ProgressController {
   ): Promise<{ completed: true; rewards: LessonRewards }> {
     const rewards = await this.completeLesson.execute({
       userId: req.user.id,
+      userEmail: req.user.email ?? req.user.id,
       lessonId,
       errorCount: typeof body?.errorCount === 'number' ? body.errorCount : 0,
       clientDate: typeof body?.date === 'string' ? body.date : null

@@ -1,14 +1,18 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ACHIEVEMENTS_REPOSITORY, type AchievementsRepository } from '../application/ports/achievements.repository';
 import { AUTH_VERIFIER } from '../application/ports/auth-verifier.port';
 import { COURSE_REPOSITORY, type CourseRepository } from '../application/ports/course.repository';
+import { LEAGUE_REPOSITORY, type LeagueRepository } from '../application/ports/league.repository';
 import { PROGRESS_REPOSITORY, type ProgressRepository } from '../application/ports/progress.repository';
 import { STATS_REPOSITORY, type StatsRepository } from '../application/ports/stats.repository';
 import { BuyStreakFreezeUseCase } from '../application/use-cases/buy-streak-freeze.use-case';
+import { CloseLeagueWeekUseCase } from '../application/use-cases/close-league-week.use-case';
 import { CompleteLessonUseCase } from '../application/use-cases/complete-lesson.use-case';
 import { GetAchievementsUseCase } from '../application/use-cases/get-achievements.use-case';
 import { GetCourseUseCase } from '../application/use-cases/get-course.use-case';
+import { GetLeagueUseCase } from '../application/use-cases/get-league.use-case';
 import { GetLessonUseCase } from '../application/use-cases/get-lesson.use-case';
 import { GetProgressUseCase } from '../application/use-cases/get-progress.use-case';
 import { GetStatsUseCase } from '../application/use-cases/get-stats.use-case';
@@ -16,19 +20,29 @@ import { ListCoursesUseCase } from '../application/use-cases/list-courses.use-ca
 import { SupabaseAuthVerifier } from '../infrastructure/auth/supabase-auth.verifier';
 import { IngestModule } from '../infrastructure/ingest.module';
 import { SupabaseAchievementsRepository } from '../infrastructure/persistence/supabase/supabase-achievements.repository';
+import { SupabaseLeagueRepository } from '../infrastructure/persistence/supabase/supabase-league.repository';
 import { SupabaseProgressRepository } from '../infrastructure/persistence/supabase/supabase-progress.repository';
 import { SupabaseStatsRepository } from '../infrastructure/persistence/supabase/supabase-stats.repository';
 import { SUPABASE_CLIENT } from '../infrastructure/persistence/supabase/supabase-client.factory';
 import { AchievementsController } from './achievements.controller';
 import { AuthGuard } from './auth.guard';
 import { CoursesController } from './courses.controller';
+import { LeagueController } from './league.controller';
+import { LeagueSchedulerService } from './league-scheduler.service';
 import { LessonsController } from './lessons.controller';
 import { ProgressController } from './progress.controller';
 import { StatsController } from './stats.controller';
 
 @Module({
-  imports: [IngestModule],
-  controllers: [CoursesController, LessonsController, ProgressController, StatsController, AchievementsController],
+  imports: [IngestModule, ScheduleModule.forRoot()],
+  controllers: [
+    CoursesController,
+    LessonsController,
+    ProgressController,
+    StatsController,
+    AchievementsController,
+    LeagueController
+  ],
   providers: [
     {
       provide: ListCoursesUseCase,
@@ -61,14 +75,37 @@ import { StatsController } from './stats.controller';
       inject: [SUPABASE_CLIENT]
     },
     {
+      provide: LEAGUE_REPOSITORY,
+      useFactory: (c: SupabaseClient) => new SupabaseLeagueRepository(c),
+      inject: [SUPABASE_CLIENT]
+    },
+    {
+      provide: CloseLeagueWeekUseCase,
+      useFactory: (league: LeagueRepository, stats: StatsRepository) =>
+        new CloseLeagueWeekUseCase({ league, stats }),
+      inject: [LEAGUE_REPOSITORY, STATS_REPOSITORY]
+    },
+    {
+      provide: GetLeagueUseCase,
+      useFactory: (league: LeagueRepository, closeWeek: CloseLeagueWeekUseCase) =>
+        new GetLeagueUseCase({ league, closeWeek }),
+      inject: [LEAGUE_REPOSITORY, CloseLeagueWeekUseCase]
+    },
+    LeagueSchedulerService,
+    {
       provide: CompleteLessonUseCase,
       useFactory: (
         courses: CourseRepository,
         progress: ProgressRepository,
         stats: StatsRepository,
-        achievements: AchievementsRepository
-      ) => new CompleteLessonUseCase({ courses, progress, stats, achievements }),
-      inject: [COURSE_REPOSITORY, PROGRESS_REPOSITORY, STATS_REPOSITORY, ACHIEVEMENTS_REPOSITORY]
+        achievements: AchievementsRepository,
+        league: LeagueRepository,
+        closeWeek: CloseLeagueWeekUseCase
+      ) => new CompleteLessonUseCase({ courses, progress, stats, achievements, league, closeWeek }),
+      inject: [
+        COURSE_REPOSITORY, PROGRESS_REPOSITORY, STATS_REPOSITORY, ACHIEVEMENTS_REPOSITORY,
+        LEAGUE_REPOSITORY, CloseLeagueWeekUseCase
+      ]
     },
     {
       provide: GetProgressUseCase,
