@@ -64,6 +64,23 @@ describe('LingoApiClient', () => {
     expect(stats.level).toBe(2);
   });
 
+  it('buyStreakFreeze envía el token por POST y devuelve el resumen actualizado', async () => {
+    server.use(
+      http.post(`${BASE}/me/streak-freezes`, ({ request }) => {
+        expect(request.headers.get('authorization')).toBe('Bearer token-123');
+        return HttpResponse.json({
+          xp: 50, level: 1, xpIntoLevel: 50, xpToNextLevel: 50,
+          streakCount: 3, streakFreezes: 1, gems: 0,
+          hearts: 5, maxHearts: 5, nextHeartAt: null
+        });
+      })
+    );
+    const client = new LingoApiClient({ baseUrl: BASE, getAccessToken: async () => 'token-123' });
+    const stats = await client.buyStreakFreeze();
+    expect(stats.streakFreezes).toBe(1);
+    expect(stats.gems).toBe(0);
+  });
+
   it('getAchievements envía el token y devuelve el catálogo con su estado', async () => {
     server.use(
       http.get(`${BASE}/me/achievements`, ({ request }) => {
