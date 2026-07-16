@@ -30,3 +30,25 @@ export function applyLessonDay(input: StreakInput, today: string): StreakResult 
   }
   return { count: 1, lastDate: today, freezes, freezeUsed: false };
 }
+
+export const STREAK_FREEZE_PRICE = 10;
+export const MAX_STREAK_FREEZES = 2;
+
+export interface StreakFreezePurchaseInput {
+  gems: number;
+  streakFreezes: number;
+}
+
+export type StreakFreezePurchaseResult =
+  | { ok: true; gems: number; streakFreezes: number }
+  | { ok: false; reason: 'insufficient-gems' | 'max-freezes-reached' };
+
+export function buyStreakFreeze(input: StreakFreezePurchaseInput): StreakFreezePurchaseResult {
+  if (input.streakFreezes >= MAX_STREAK_FREEZES) {
+    return { ok: false, reason: 'max-freezes-reached' };
+  }
+  if (input.gems < STREAK_FREEZE_PRICE) {
+    return { ok: false, reason: 'insufficient-gems' };
+  }
+  return { ok: true, gems: input.gems - STREAK_FREEZE_PRICE, streakFreezes: input.streakFreezes + 1 };
+}
