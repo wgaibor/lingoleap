@@ -10,8 +10,10 @@ import type { ProgressRepository } from '../application/ports/progress.repositor
 import { PROGRESS_REPOSITORY } from '../application/ports/progress.repository';
 import { COURSE_REPOSITORY, type CourseRepository } from '../application/ports/course.repository';
 import { STATS_REPOSITORY, type StatsRepository } from '../application/ports/stats.repository';
+import { LEAGUE_REPOSITORY, type LeagueRepository } from '../application/ports/league.repository';
+import type { LeagueCohort, LeagueMembership } from '../domain/league';
 import type { UserStats } from '../domain/user-stats';
-import type { Lesson } from '@lingoleap/core';
+import type { Lesson, LeagueDivision } from '@lingoleap/core';
 import { ContentApiModule } from './content-api.module';
 import { DomainExceptionFilter } from './domain-exception.filter';
 
@@ -50,6 +52,53 @@ class FakeAchievements implements AchievementsRepository {
   async unlock(_userId: string, achievementId: string): Promise<void> { this.unlocked.push(achievementId); }
 }
 
+class FakeLeague implements LeagueRepository {
+  cohorts: LeagueCohort[] = [];
+  memberships: LeagueMembership[] = [];
+  private nextId = 1;
+  async findMembership(userId: string, weekStart: string) {
+    const cohortIds = new Set(this.cohorts.filter((c) => c.weekStart === weekStart).map((c) => c.id));
+    const m = this.memberships.find((x) => x.userId === userId && cohortIds.has(x.cohortId)) ?? null;
+    if (!m) return null;
+    return { cohort: this.cohorts.find((c) => c.id === m.cohortId)!, membership: m };
+  }
+  async findLatestClosedMembership(userId: string) {
+    const closed = this.memberships
+      .map((m) => ({ membership: m, cohort: this.cohorts.find((c) => c.id === m.cohortId)! }))
+      .filter((x) => x.membership.userId === userId && x.cohort.closedAt !== null)
+      .sort((a, b) => b.cohort.weekStart.localeCompare(a.cohort.weekStart));
+    return closed[0] ?? null;
+  }
+  async findOpenCohort(division: LeagueDivision, weekStart: string, maxSize: number) {
+    return this.cohorts.find(
+      (c) => c.division === division && c.weekStart === weekStart && c.closedAt === null &&
+        this.memberships.filter((m) => m.cohortId === c.id).length < maxSize
+    ) ?? null;
+  }
+  async createCohort(division: LeagueDivision, weekStart: string) {
+    const cohort = { id: `cohort-${this.nextId++}`, division, weekStart, closedAt: null };
+    this.cohorts.push(cohort);
+    return cohort;
+  }
+  async saveMembership(membership: LeagueMembership) {
+    const i = this.memberships.findIndex(
+      (m) => m.cohortId === membership.cohortId && m.userId === membership.userId
+    );
+    if (i >= 0) this.memberships[i] = membership;
+    else this.memberships.push(membership);
+  }
+  async listMemberships(cohortId: string) {
+    return this.memberships.filter((m) => m.cohortId === cohortId);
+  }
+  async listExpiredOpenCohorts(currentWeekStart: string) {
+    return this.cohorts.filter((c) => c.closedAt === null && c.weekStart < currentWeekStart);
+  }
+  async closeCohort(cohortId: string, closedAt: string) {
+    const c = this.cohorts.find((x) => x.id === cohortId);
+    if (c) c.closedAt = closedAt;
+  }
+}
+
 describe('API de progreso', () => {
   let app: INestApplication;
   const progress = new FakeProgress();
@@ -64,6 +113,7 @@ describe('API de progreso', () => {
       .overrideProvider(COURSE_REPOSITORY).useValue(new FakeCourses())
       .overrideProvider(STATS_REPOSITORY).useValue(new FakeStats())
       .overrideProvider(ACHIEVEMENTS_REPOSITORY).useValue(new FakeAchievements())
+      .overrideProvider(LEAGUE_REPOSITORY).useValue(new FakeLeague())
       .compile();
     app = moduleRef.createNestApplication();
     app.useGlobalFilters(new DomainExceptionFilter());

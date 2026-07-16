@@ -1,16 +1,19 @@
 import {
-  applyLessonDay, lessonXp, levelProgress, loseHearts, regenerateHearts, unlockedAchievements,
+  applyLessonDay, divisionAfter, lessonXp, levelProgress, loseHearts, LEAGUE_COHORT_SIZE,
+  regenerateHearts, unlockedAchievements, weekStartOf,
   type LessonRewards
 } from '@lingoleap/core';
 import { LessonNotFoundError } from '../../domain/errors';
 import { defaultUserStats } from '../../domain/user-stats';
 import type { AchievementsRepository } from '../ports/achievements.repository';
 import type { CourseRepository } from '../ports/course.repository';
+import type { LeagueRepository } from '../ports/league.repository';
 import type { ProgressRepository } from '../ports/progress.repository';
 import type { StatsRepository } from '../ports/stats.repository';
 
 export interface CompleteLessonInput {
   userId: string;
+  userEmail: string;
   lessonId: string;
   errorCount: number;
   clientDate: string | null;
@@ -26,6 +29,7 @@ export class CompleteLessonUseCase {
       progress: ProgressRepository;
       stats: StatsRepository;
       achievements: AchievementsRepository;
+      league: LeagueRepository;
       now?: () => string;
     }
   ) {}
@@ -76,6 +80,32 @@ export class CompleteLessonUseCase {
 
     for (const achievement of newlyUnlocked) {
       await this.deps.achievements.unlock(input.userId, achievement.id, nowIso);
+    }
+
+    const weekStart = weekStartOf(today);
+    const active = await this.deps.league.findMembership(input.userId, weekStart);
+    if (active) {
+      await this.deps.league.saveMembership({
+        ...active.membership,
+        weeklyXp: active.membership.weeklyXp + xpEarned,
+        lastXpAt: nowIso
+      });
+    } else {
+      const latest = await this.deps.league.findLatestClosedMembership(input.userId);
+      const division = latest
+        ? divisionAfter(latest.cohort.division, latest.membership.result ?? 'stayed')
+        : 'bronze';
+      const cohort =
+        (await this.deps.league.findOpenCohort(division, weekStart, LEAGUE_COHORT_SIZE)) ??
+        (await this.deps.league.createCohort(division, weekStart));
+      await this.deps.league.saveMembership({
+        cohortId: cohort.id,
+        userId: input.userId,
+        displayName: input.userEmail.split('@')[0],
+        weeklyXp: xpEarned,
+        lastXpAt: nowIso,
+        result: null
+      });
     }
 
     return {
