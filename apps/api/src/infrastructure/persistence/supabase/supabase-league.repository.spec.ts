@@ -71,4 +71,32 @@ describe('SupabaseLeagueRepository', () => {
       last_xp_at: '2026-07-15T12:00:00.000Z', result: null
     });
   });
+
+  it('findOpenCohort devuelve la primera cohorte cuyo conteo embebido está debajo de maxSize', async () => {
+    const full = { ...cohortRow, id: 'c1', league_memberships: [{ count: 30 }] };
+    const open = { ...cohortRow, id: 'c2', league_memberships: [{ count: 3 }] };
+    const { client } = clientReturning({ data: [full, open], error: null });
+    const repo = new SupabaseLeagueRepository(client);
+    const found = await repo.findOpenCohort('bronze', '2026-07-13', 30);
+    expect(found).toEqual({ id: 'c2', division: 'bronze', weekStart: '2026-07-13', closedAt: null });
+  });
+
+  it('findOpenCohort devuelve null si todas las cohortes están llenas o no hay resultados', async () => {
+    const full = { ...cohortRow, id: 'c1', league_memberships: [{ count: 30 }] };
+    const { client: clientFull } = clientReturning({ data: [full], error: null });
+    const repoFull = new SupabaseLeagueRepository(clientFull);
+    expect(await repoFull.findOpenCohort('bronze', '2026-07-13', 30)).toBeNull();
+
+    const { client: clientEmpty } = clientReturning({ data: [], error: null });
+    const repoEmpty = new SupabaseLeagueRepository(clientEmpty);
+    expect(await repoEmpty.findOpenCohort('bronze', '2026-07-13', 30)).toBeNull();
+  });
+
+  it('findOpenCohort trata un embed league_memberships ausente o vacío como conteo 0', async () => {
+    const missingEmbed = { ...cohortRow, id: 'c1', league_memberships: [] };
+    const { client } = clientReturning({ data: [missingEmbed], error: null });
+    const repo = new SupabaseLeagueRepository(client);
+    const found = await repo.findOpenCohort('bronze', '2026-07-13', 30);
+    expect(found).toEqual({ id: 'c1', division: 'bronze', weekStart: '2026-07-13', closedAt: null });
+  });
 });
