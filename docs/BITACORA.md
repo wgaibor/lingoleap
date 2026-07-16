@@ -832,7 +832,10 @@ rama `feature/weekly-league`.
   en los tres casos: una transacción o RPC de Postgres que agrupe lectura, escritura y marca de
   estado en una sola operación atómica. Riesgo real bajo en este caso (requiere que el proceso
   muera en una ventana muy angosta, entre dos escrituras consecutivas), pero queda anotado junto
-  a la deuda ya existente para resolverse en conjunto.
+  a la deuda ya existente para resolverse en conjunto. Dos disparadores concurrentes (el cron y el
+  cierre perezoso lanzado en paralelo desde `CompleteLessonUseCase`) comparten la misma causa raíz
+  (sin transacción) y podrían acreditar el podio dos veces; queda cubierto por el mismo fix de
+  fondo (RPC/transacción en Postgres).
 - **Pre-smoke pendiente:** correr `supabase/migrations/0005_league.sql` en el SQL Editor de
   Supabase antes de cualquier smoke real end-to-end de la liga (igual que las migraciones
   anteriores, no se aplica sola).
@@ -860,7 +863,8 @@ rama `feature/weekly-league`.
 > abiertos: listas de frecuencia para el currículo, Tatoeba para oraciones reales, MyMemory
 > para traducciones y Pexels para imágenes. El backend es NestJS con arquitectura hexagonal:
 > el dominio es TypeScript puro y las integraciones externas son adaptadores intercambiables
-> detrás de interfaces, lo que me dejó testear todo con fakes — 39 tests escritos con TDD.
+> detrás de interfaces, lo que me dejó testear todo con fakes — 204 tests en el monorepo,
+> escritos con TDD.
 > El contenido se ingesta offline a Postgres (Supabase), así los rate limits de las APIs
 > gratuitas nunca tocan al usuario. Todo corre en CI con GitHub Actions. Encima construí el
 > cliente web en React: TanStack Query para el estado de servidor, zustand para el estado de
