@@ -1,10 +1,3 @@
-// apps/mobile/app/index.tsx (provisional; la Task 4 lo reemplaza)
-import { Text, View } from 'react-native';
+import { CoursesScreen } from '../src/features/course-path/CoursesScreen';
 
-export default function Home() {
-  return (
-    <View>
-      <Text>LingoLeap</Text>
-    </View>
-  );
-}
+export default CoursesScreen;
