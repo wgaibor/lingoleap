@@ -16,18 +16,18 @@ describe('ImageSelectExercise', () => {
   it('Comprobar está deshabilitado sin selección y resuelve true con la opción correcta', async () => {
     const onResolve = jest.fn();
     await render(<ImageSelectExercise exercise={exercise} onResolve={onResolve} />);
-    fireEvent.press(screen.getByText('Comprobar'));
+    await fireEvent.press(screen.getByText('Comprobar'));
     expect(onResolve).not.toHaveBeenCalled();
-    fireEvent.press(screen.getByText('gato'));
-    fireEvent.press(screen.getByText('Comprobar'));
+    await fireEvent.press(screen.getByText('gato'));
+    await fireEvent.press(screen.getByText('Comprobar'));
     expect(onResolve).toHaveBeenCalledWith(true);
   });
 
   it('resuelve false con la opción incorrecta', async () => {
     const onResolve = jest.fn();
     await render(<ImageSelectExercise exercise={exercise} onResolve={onResolve} />);
-    fireEvent.press(screen.getByText('perro'));
-    fireEvent.press(screen.getByText('Comprobar'));
+    await fireEvent.press(screen.getByText('perro'));
+    await fireEvent.press(screen.getByText('Comprobar'));
     expect(onResolve).toHaveBeenCalledWith(false);
   });
 });
