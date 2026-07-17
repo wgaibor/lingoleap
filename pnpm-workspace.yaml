@@ -1,6 +1,10 @@
 packages:
   - "apps/*"
   - "packages/*"
+# El build nativo Android (CMake/prefab) de react-native-worklets llega a ~230 caracteres
+# de profundidad bajo node_modules; acortar los nombres del virtual store de .pnpm da
+# margen frente al límite de 260 (MAX_PATH) de Windows. Ver BITACORA Fase 4A.
+virtualStoreDirMaxLength: 25
 allowBuilds:
   '@swc/core': true
   esbuild: false
