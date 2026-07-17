@@ -146,7 +146,9 @@ congelado → lint → build → tests. El badge de arriba refleja el estado de 
 - [ ] **Fase 3A** — Gamificación: XP, niveles, racha diaria y corazones *(smoke real completo — falta merge a master)*
 - [ ] **Fase 3B** — Gemas, congeladores de racha, ligas semanales, logros *(logros, gemas,
       congelador comprable y liga semanal completos — falta el merge a master)*
-- [ ] **Fase 4** — App móvil con React Native + Expo (reusa `packages/core`)
+- [x] **Fase 4A** — Esqueleto de app móvil con Expo Router: auth, lista de cursos, camino de
+      lecciones con desbloqueo progresivo, `StatsBar` *(completa; el reproductor de lecciones
+      queda para la Fase 4B)*
 - [ ] **Fase 5** — Portugués e italiano (solo correr el pipeline) + despliegue
 
 ## Gamificación (Fase 3A)
@@ -202,6 +204,23 @@ un cron semanal (`LeagueSchedulerService`, lunes 00:05 UTC) y un disparador pere
 `GET /me/league` que cierra cualquier cohorte vencida antes de responder — necesario porque, con
 $0 de infraestructura, el proceso no está vivo 24/7. `closed_at` hace que ambos disparadores sean
 idempotentes entre sí.
+
+## App móvil (Fase 4A)
+
+`apps/mobile` es un cliente Expo + Expo Router que reusa `packages/core` y
+`@lingoleap/api-client` tal cual la web: auth con Supabase, lista de cursos, camino de
+lecciones con desbloqueo progresivo y `StatsBar`. El reproductor de lecciones es un
+placeholder ("Próximamente") hasta la Fase 4B.
+
+```bash
+# apps/mobile/.env (ver apps/mobile/.env.example) — usar la IP LAN de la PC que corre la API,
+# no localhost, para que el teléfono la alcance en la misma WiFi
+EXPO_PUBLIC_API_URL=http://192.168.0.10:3000
+EXPO_PUBLIC_SUPABASE_URL=...
+EXPO_PUBLIC_SUPABASE_ANON_KEY=...
+
+pnpm --filter @lingoleap/mobile dev   # abre Metro; escanear el QR con Expo Go
+```
 
 ## Documentación
 

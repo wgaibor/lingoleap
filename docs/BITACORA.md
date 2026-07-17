@@ -1012,5 +1012,107 @@ no de un ejercicio en aislamiento.
 
 ---
 
+## Fase 4A — Esqueleto móvil con Expo (2026-07-16/17)
+
+Primer corte de la Fase 4, acotado a levantar `apps/mobile` como cliente real (no un demo):
+Expo + Expo Router, autenticación con Supabase, lista de cursos, camino de lecciones con
+desbloqueo progresivo y `StatsBar` — reusando `packages/core` y `@lingoleap/api-client` tal
+cual los usa la web. El reproductor de lecciones queda como placeholder ("Próximamente") para
+la Fase 4B. Spec: `docs/superpowers/specs/2026-07-15-mobile-skeleton-design.md` (§8); plan de
+6 tareas ejecutado en la rama `feature/fase-4a-mobile`, commits `b827cc1..cdb053b`.
+
+### Decisiones técnicas y su porqué
+
+1. **Metro + pnpm workspaces.** Metro (el bundler de Expo) no sigue symlinks de pnpm por
+   defecto y solo vigila `apps/mobile` — no ve cambios en `packages/core`/`packages/tokens`
+   fuera de su árbol. `metro.config.js` agrega `config.watchFolders = [workspaceRoot]` (la raíz
+   del monorepo) y `config.resolver.nodeModulesPaths` apuntando tanto a
+   `apps/mobile/node_modules` como a `<raíz>/node_modules`, para que Metro resuelva paquetes
+   hoisteados por pnpm. Es el equivalente exacto, en Metro, del `commonjsOptions.include` que
+   ya tiene `apps/web/vite.config.ts` para el mismo problema de symlinks de pnpm — mismo
+   síntoma, dos bundlers, mismo tipo de fix.
+2. **Theme manual como traducción documentada de `tokens.css`**, no una lectura en runtime.
+   React Native no tiene CSS ni `:root` con variables — no hay forma de "consumir" el mismo
+   archivo que usa la web. `apps/mobile/src/app/theme.ts` es una traducción 1:1 a mano de
+   `packages/tokens/src/tokens.css`, con un comentario explícito ("si tokens.css cambia, este
+   archivo se actualiza a mano") para que el desfase sea una tarea consciente y no un olvido
+   silencioso. La regla de "colores solo desde tokens" se mantiene: ningún componente móvil
+   tiene hex hardcodeado, todos importan `theme`.
+3. **`jest-expo` + `transformIgnorePatterns` con `.pnpm`.** El preset de `jest-expo` trae un
+   patrón por defecto para no transformar `node_modules/`, salvo los paquetes de RN/Expo — pero
+   ese patrón asume una instalación con `node_modules` plano (npm/yarn clásico). Con pnpm, los
+   paquetes reales cuelgan de `node_modules/.pnpm/<paquete>@<version>/node_modules/<paquete>`, y
+   el patrón por defecto no matchea esa ruta anidada: Jest fallaba transformando ESM de
+   Expo/Supabase como CommonJS. Se amplió `transformIgnorePatterns` en `jest.config.js` con un
+   grupo opcional `(?:\\.pnpm/[^/]+/node_modules/)?` antes de la lista de paquetes a sí
+   transformar — mismo problema de raíz que el `commonjsOptions.include` de Vite (pnpm resuelve
+   por symlink/anidado, no plano), tercera vez que aparece en este monorepo.
+4. **`AuthGate` en `app/_layout.tsx`** es el equivalente móvil exacto de `RequireAuth` (Fase 2):
+   un único componente, envolviendo todo el árbol de Expo Router, que decide el redirect según
+   `useAuth()` — a `/login` si no hay sesión, a `/` si hay sesión y el usuario está en
+   `/login`. Ninguna pantalla individual sabe que la auth existe; igual que en la web, es el
+   único lugar con esa responsabilidad.
+
+### Problemas reales encontrados (no anticipados por el plan)
+
+1. **Patrón de mocks obligatorio por el hoisting de Babel.** En los cuatro specs con
+   `jest.mock(...)` (`AuthProvider`, `LoginScreen`, `CoursesScreen`, `CoursePathScreen`/
+   `StatsBar`), declarar el `jest.fn()` como `const` *antes* de `jest.mock(...)` y referenciarlo
+   dentro del factory falla: Babel hoistea `jest.mock(...)` (y los `import` que dispara) por
+   encima de las declaraciones `const` normales, así que el factory corre con el valor aún sin
+   asignar (`ReferenceError: Cannot access '<fixture>' before initialization`, o
+   `TypeError: ... is not a function` si el nombre sí tiene el prefijo `mock` que exige Jest).
+   Se resolvió creando el `jest.fn()` *dentro* del factory de `jest.mock` y tomando la
+   referencia real después del `import`, vía `modulo.metodo as jest.Mock`, para configurar
+   `mockResolvedValue`/`mockReturnValue` en cada test — mismo patrón repetido en las cuatro
+   tareas, documentado la primera vez en el Task 2 y reutilizado sin volver a redescubrirlo.
+2. **`IS_REACT_ACT_ENVIRONMENT` + `render()` asíncrono en `@testing-library/react-native` 14.**
+   La combinación de este repo (React 19.2.3 + `react-test-renderer`/`react-reconciler` 0.33 +
+   RNTL 14.0.1 vía `jest-expo` 57) no marca por defecto el entorno como "act environment", y
+   `render()` de RNTL v14 hace internamente `await act(...)` antes de registrar el árbol en el
+   singleton `screen`. Sin `globalThis.IS_REACT_ACT_ENVIRONMENT = true` en `jest.setup.ts`
+   (agregado en la Task 3) y sin `await render(...)`/`await renderWithQuery(...)` en cada spec
+   (Tasks 3-5), las queries inmediatas fallaban con `` `render` function has not been called ``
+   — no por ausencia del componente, sino por una carrera con el `act()` interno. En
+   `LoginScreen.spec.tsx` hizo falta además un `await waitFor(...)` entre `fireEvent.changeText`
+   consecutivos, porque sin él el segundo evento se disparaba antes de que el primer `setState`
+   terminara de flushear.
+3. **Contrato real de `CourseSummary` sin `lessonCount`.** El shape real en
+   `packages/core/src/exercises.ts` es `{ id, language, level, title }` — no incluye un contador
+   de lecciones como asumía el snippet de ejemplo del plan. `CoursesScreen` (Task 4) usa
+   `course.id` como `keyExtractor` y muestra `Nivel {level}` en vez del contador inexistente,
+   igual que ya hace `apps/web/src/features/course-path/CoursesPage.tsx`.
+4. **Fixture de `Lesson` sin `exercises`.** `Lesson` en `packages/core/src/exercises.ts` exige
+   `exercises: Exercise[]`; el fixture de ejemplo para `CoursePathScreen.spec.tsx` (Task 5) no lo
+   incluía y el tipo lo rechazaba. Se agregó `exercises: []` a cada lección del fixture — el
+   componente no llega a leer ese campo (solo pinta el camino, no ejercicios), así que no afecta
+   la aserción.
+
+### Deuda técnica registrada
+
+- `tsc --noEmit` reporta errores de tipos en todos los `*.spec.tsx` de `apps/mobile` (faltan los
+  tipos globales de Jest — `tsconfig.json` no tiene `"types": ["jest", ...]`). Preexistente desde
+  la Task 1/2, no detectado por CI porque `apps/mobile` no tiene script `build`/`typecheck`
+  wireado en el pipeline de turbo.
+- Warnings cosméticos de `act(...)`/"overlapping act() calls" en consola durante los tests de
+  `LoginScreen` (porque `handleSubmit` hace `await supabase.auth...` fuera del `act()` síncrono
+  que envuelve `fireEvent.press`) — no afectan el resultado, documentado como candidato a un
+  helper `act`/`flush` compartido si aparecen más pantallas con formularios controlados.
+- `CoursesScreen` navega a `/course/[language]/[level]`, que la Task 5 sí implementó, pero el
+  placeholder de `/lesson/[lessonId].tsx` no valida que el id corresponda a una lección real ni
+  aplica `canStartLesson`/corazones — se asume que esa validación entra junto con el reproductor
+  real de la Fase 4B, igual que en el flujo web equivalente.
+
+### Números de la fase
+
+- `apps/mobile`: 6 test suites / 10 tests, todos PASS (`theme`, `AuthProvider`, `LoginScreen`,
+  `CoursesScreen`, `CoursePathScreen`, `StatsBar`).
+- `pnpm test` (turbo, monorepo completo): 8/8 tareas exitosas, incluida `@lingoleap/mobile:test`.
+- `pnpm build` (turbo): `apps/mobile` no define script `build` (Expo no lo necesita para este
+  esqueleto) y no participa en ese pipeline; el resto de paquetes/apps compila sin error.
+- `pnpm lint`: limpio en todo el repo, incluido `apps/mobile`.
+
+---
+
 *Próxima entrada: cierre de la Fase 3B (merge a `master`) y, como sub-proyectos futuros
 separados, el gasto de gemas en congeladores de racha comprados y la liga semanal con cron.*
