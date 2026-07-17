@@ -27,7 +27,9 @@ describe('AuthProvider', () => {
         <Probe />
       </AuthProvider>
     );
-    await waitFor(() => expect(screen.getByText('con-sesion')).toBeTruthy());
+    // Timeout amplio: en CI (2 cores, suites en paralelo) el flush del update
+    // asíncrono de getSession puede tardar más que los 5s por defecto de waitFor.
+    await waitFor(() => expect(screen.getByText('con-sesion')).toBeTruthy(), { timeout: 15000 });
   });
 
   it('expone null cuando no hay sesión', async () => {
@@ -38,6 +40,6 @@ describe('AuthProvider', () => {
         <Probe />
       </AuthProvider>
     );
-    await waitFor(() => expect(screen.getByText('sin-sesion')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('sin-sesion')).toBeTruthy(), { timeout: 15000 });
   });
 });
