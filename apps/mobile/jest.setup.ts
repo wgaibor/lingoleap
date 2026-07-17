@@ -2,3 +2,9 @@
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
+
+// React 19 + react-test-renderer no marcan el entorno como "act environment" por
+// defecto: sin este flag, fireEvent/render no envuelven las actualizaciones de
+// estado en act() de forma síncrona y las queries de `screen` (RNTL) pueden no
+// ver el árbol recién montado o actualizado.
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
