@@ -50,7 +50,7 @@ export function CoursePathScreen() {
                   key={lesson.id}
                   testID={`lesson-${lesson.id}-${lessonStatus}`}
                   disabled={locked}
-                  onPress={() => router.push(`/lesson/${lesson.id}`)}
+                  onPress={() => router.push(`/lesson/${lesson.id}?lang=${language}`)}
                   style={[styles.lesson, locked && styles.lessonLocked]}
                 >
                   <Text style={styles.lessonEmoji}>{STATUS_EMOJI[lessonStatus]}</Text>
