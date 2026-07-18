@@ -1224,6 +1224,55 @@ la rama `feature/fase-4b-lesson-player`, commits `c48527b..4c42224`.
 
 ---
 
-*Próxima entrada: smoke manual del reproductor en dispositivo real (a discreción del usuario),
-review final de rama + merge de Fase 4B a `master`, y luego Fase 5 (portugués e italiano +
-despliegue).*
+## Fase 5 (mitad 1) — Cursos de portugués e italiano + inglés ampliado (2026-07-18)
+
+Fase puramente **operativa**: cero código nuevo. Se corrió el pipeline de ingesta existente tres
+veces (secuenciales, nunca en paralelo, por los rate limits gratuitos) en el orden `pt-BR` → `it`
+→ `en`, dejando el inglés al final por ser el único curso con progreso que se pierde al
+reemplazarse.
+
+### Reportes de ingesta (`--level A1 --limit 120`)
+
+| Idioma | Palabras pedidas | Materiales | Saltadas | % saltadas | Ejercicios | Lecciones | Unidades |
+|---|---|---|---|---|---|---|---|
+| pt-BR | 120 | 101 | 19 | 15.8% | 323 | 33 | 7 |
+| it | 120 | 100 | 20 | 16.7% | 320 | 32 | 7 |
+| en (1er intento) | 120 | 54 | 66 | **55%** ❌ | 173 | 18 | 4 |
+| en (reintento) | 120 | 110 | 10 | 8.3% ✅ | 351 | 36 | 8 |
+
+Total en base tras la fase: **3 cursos, 101 lecciones** (33 + 32 + 36).
+
+### Problema real: rate limit horario de Pexels (HTTP 429)
+
+El primer intento de inglés superó el umbral de calidad del 30% definido en el plan (55%
+saltadas). Los `console.warn` mostraron la causa exacta: **todas** las palabras saltadas fallaron
+con `HTTP 429` de `api.pexels.com` tras 4 reintentos — las tres corridas seguidas agotaron la
+cuota horaria del plan gratuito de Pexels (200 requests/hora). No era falta de cobertura del
+idioma sino cuota agotada, así que se aplicó la rama "reintentar más tarde" del plan: espera de
+~70 minutos y re-corrida, que pasó holgadamente (8.3% saltadas). Lección para futuras ingestas
+multi-idioma: espaciar las corridas ~1 hora o bajar el `--limit`.
+
+### Progreso huérfano tras reemplazar inglés
+
+Confirmado lo previsto en el spec: al reemplazar el curso `en`, `user_progress` quedó **vacío**
+(la FK a `lessons` es ON DELETE CASCADE). XP, racha y gemas de `user_stats` intactos. Aceptado
+por el usuario en el spec de diseño.
+
+### Verificación
+
+- `GET /courses` (API local) devuelve los 3 cursos: `Inglés A1`, `Italiano A1`,
+  `Portugués (Brasil) A1`.
+- Spot-check web del curso de portugués (Chrome, sesión real): los 3 cursos en la home, camino
+  de 33 lecciones con desbloqueo progresivo (Lección 1 activa, resto 🔒), y dentro de la
+  Lección 1 se validaron traducir-con-banco ("Vamos." → "Voy a ir" ✅), listening ✅ y
+  selección-por-imagen con fotos de Pexels cargando ✅. Frases reales de Tatoeba
+  ("Vou chorar."). Sin errores en consola.
+- Observación de calidad de contenido: un material de pt-BR tiene la traducción sucia — el
+  enunciado del image-select mostró «¿Cuál es ".»?" (MyMemory devolvió `.`). Caso aislado;
+  candidato a filtro de calidad en el pipeline (rechazar traducciones vacías/solo puntuación).
+- Spot-check móvil: pendiente, a discreción del usuario (requiere dispositivo).
+
+---
+
+*Próxima entrada: Fase 5 mitad 2 — despliegue $0 (API + web) y spot-check móvil de los cursos
+nuevos.*

@@ -150,7 +150,9 @@ congelado → lint → build → tests. El badge de arriba refleja el estado de 
       lecciones con desbloqueo progresivo, `StatsBar` *(completa)*
 - [x] **Fase 4B** — Reproductor de lecciones móvil: 4 tipos de ejercicio, TTS con
       `expo-speech`, guarda de corazones, guardado de progreso *(completa)*
-- [ ] **Fase 5** — Portugués e italiano (solo correr el pipeline) + despliegue
+- [ ] **Fase 5** — Portugués e italiano (solo correr el pipeline) + despliegue *(mitad 1
+      completa: 3 cursos A1 en la base — inglés, portugués brasileño e italiano, 101 lecciones —
+      falta el despliegue)*
 
 ## Gamificación (Fase 3A)
 
