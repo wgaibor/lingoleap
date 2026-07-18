@@ -1114,5 +1114,116 @@ la Fase 4B. Spec: `docs/superpowers/specs/2026-07-15-mobile-skeleton-design.md` 
 
 ---
 
-*Próxima entrada: cierre de la Fase 3B (merge a `master`) y, como sub-proyectos futuros
-separados, el gasto de gemas en congeladores de racha comprados y la liga semanal con cron.*
+## Fase 4B — Reproductor de lecciones móvil (2026-07-17)
+
+Segundo corte de la Fase 4: reemplazar el placeholder de `LessonPlayerScreen` de la 4A por un
+reproductor real en `apps/mobile` — sessionStore, TTS con `expo-speech`, los 4 tipos de ejercicio
+(image-select, translate-with-word-bank, listening, match-pairs), guardas de corazones al entrar y
+guardado de progreso/stats al completar. Spec:
+`docs/superpowers/specs/2026-07-17-fase-4b-mobile-lesson-player-design.md`; plan de 9 tareas sobre
+la rama `feature/fase-4b-lesson-player`, commits `c48527b..4c42224`.
+
+### Decisiones técnicas y su porqué
+
+1. **Port 1:1 en vez de un player "headless" compartido** (spec §7). La alternativa evaluada era
+   extraer la orquestación del reproductor (sessionStore + wiring de ejercicios) a un paquete
+   compartido entre web y móvil, análogo a como `packages/core` ya comparte dominio puro. Se
+   descartó: exigiría refactorizar la web *en esta misma fase* solo para acomodar una abstracción
+   de UI que recién se estabiliza en móvil, y agregaría un paquete nuevo por lógica de
+   presentación (no de dominio) cuando lo que realmente se repite —`sessionStore.ts`,
+   `localDate.ts`, `motivationalPhrases.ts`, `achievementLabels.ts`— es wiring fino, no reglas de
+   negocio. El dominio (`startSession`/`submitAnswer`/`advance`, validación de respuestas,
+   `canStartLesson`) ya vive una sola vez en `packages/core` y ambas plataformas lo consumen tal
+   cual; duplicar el store de zustand y las pantallas es el costo aceptado a cambio de no acoplar
+   dos apps que evolucionan a ritmos distintos.
+2. **TTS directo con `expo-speech`, sin audio pregrabado.** Igual que la web (que tampoco tiene
+   audio pregrabado real y siempre cae a Web Speech API), el ejercicio de listening y el botón de
+   pronunciación de translate reproducen el texto por síntesis de voz en el dispositivo — no hay
+   URLs de audio servidas por el backend. `apps/mobile/src/shared/useSpeech.ts` es el port 1:1 de
+   `apps/web/src/shared/useSpeech.ts`: mismo mapeo de idioma a locale BCP47 (`en → en-US`,
+   `pt-BR → pt-BR`, `it → it-IT`), mismo `rate: 0.95`, mismo `stop()` antes de cada `speak()` para
+   no solapar pronunciaciones consecutivas. Costo $0 y consistente con la filosofía de la Fase 1
+   (nunca pagar por contenido que un servicio gratuito ya resuelve).
+3. **Guardas portadas de la web sin sorpresas nuevas.** `canStartLesson(hearts,
+   lessonAlreadyCompleted)` de `packages/core` gobierna en `LessonPlayerScreen` exactamente el
+   mismo caso "sin corazones → solo repaso" que ya usa `LessonPlayerPage` en la web, y el guardado
+   de progreso reusa el mismo contrato de `POST /progress/lessons/:id/complete` (`errorCount`
+   clamped, `date` con formato validado server-side). No mordió de forma distinta en RN: el único
+   ajuste fue de forma (React Native no tiene `<button disabled>` nativo, así que la guarda se
+   traduce a `disabled` + estilo de opacidad en `Pressable`, como ya hacían los componentes de la
+   4A), no de lógica.
+4. **Taps en vez de drag & drop para word-bank/match-pairs.** Se evaluó y descartó gesture
+   handlers de arrastre: los taps dan paridad funcional exacta con la web (seleccionar/deseleccionar
+   tokens, o dos taps para emparejar) sin la complejidad y las dependencias nativas de
+   `react-native-gesture-handler`/`reanimated` para algo que no es requisito de esta fase; queda
+   como mejora candidata para la Fase 4C si el usuario lo pide tras probar el smoke.
+
+### Problemas reales encontrados
+
+1. **`fireEvent.press` async de RNTL v14 — misdiagnosticado como límite del entorno (Task 3).**
+   La primera pasada de `ImageSelectExercise.spec.tsx` disparaba dos `fireEvent.press(...)`
+   seguidos sin `await` (seleccionar imagen, luego pulsar "Comprobar"), y el segundo press nunca
+   invocaba su handler. El reporte inicial (Task 3) lo achacó a "una limitación de jest-expo con
+   Pressables cuyo handler actualiza `useState`" y probó `act()` manual, `accessibilityRole`,
+   `testID` — nada cambió, porque el diagnóstico era incorrecto. La causa real: `fireEvent`/
+   `fireEvent.press` en RNTL v14 son funciones `async` que internamente hacen `await act(...)`
+   para flushear el `setState` y el re-render antes de devolver el control. Sin `await` en el
+   primer press, el segundo `fireEvent.press` se ejecutaba con el árbol todavía mostrando
+   `disabled={true}` en el botón "Comprobar" (`Pressable` consulta `onStartShouldSetResponder`,
+   que sigue leyendo el `disabled` viejo) — por eso el handler jamás se invocaba, 0 llamadas, no un
+   valor incorrecto. Se confirmó contra la convención ya existente en el repo:
+   `LoginScreen.spec.tsx` (4A, en verde) nunca encadena un `fireEvent.press`/`fireEvent.changeText`
+   sin `await` seguido de una aserción que dependa del estado resultante. El fix fue añadir
+   `await` a los 4 sitios de `fireEvent.press` del spec — cero cambios al componente. Esta
+   distinción (bug de test vs. límite de entorno) es la lección explícita que se propagó a las
+   Tasks 4-7: todas las tareas posteriores escribieron sus specs con `await` en cada
+   `render(...)`/`fireEvent.press(...)` desde el primer intento, sin repetir el error.
+2. **`renderHook` también asíncrono en RNTL v14 (Task 2).** El brief de `useSpeech.spec.ts` traía
+   ejemplos de test síncronos, pero `renderHook()` de `@testing-library/react-native` v14 también
+   devuelve una `Promise` (misma familia de causa que el punto anterior: todo lo que toca el árbol
+   de render pasa por `act()` async). Se adaptó envolviendo cada test en `async/await`, sin tocar
+   la lógica ni las aserciones del brief.
+3. **Fake timers + `act()` para el flash de error de match-pairs (Task 5).** El feedback visual de
+   "par incorrecto" en `MatchPairsExercise` usa un `setTimeout` de 400ms para deseleccionar tras el
+   flash; probarlo con temporizadores reales habría hecho el test lento y potencialmente frágil.
+   Se usaron fake timers de Jest envueltos en `act()` para avanzar el reloj de forma controlada sin
+   warnings de "state update not wrapped in act()".
+4. **Deuda de la Fase 4A saldada.** El placeholder de `/lesson/[lessonId].tsx` que la 4A dejó
+   documentado como deuda (sin validar que el id correspondiera a una lección real ni aplicar
+   `canStartLesson`) queda resuelto: `LessonPlayerScreen` (Task 7) valida la lección vía
+   `useLesson`, aplica la guarda de corazones antes de permitir intentos nuevos (repaso siempre
+   disponible si ya estaba completada) y solo entonces monta el reproductor — ver sección de deuda
+   técnica más abajo para el detalle del saldo.
+
+### Deuda técnica registrada
+
+- ~~`CoursesScreen` navega a `/course/[language]/[level]`, que la Task 5 sí implementó, pero el
+  placeholder de `/lesson/[lessonId].tsx` no valida que el id corresponda a una lección real ni
+  aplica `canStartLesson`/corazones — se asume que esa validación entra junto con el reproductor
+  real de la Fase 4B, igual que en el flujo web equivalente.~~ **Saldado en la Fase 4B**:
+  `LessonPlayerScreen` (Task 7, commit `4c42224`) reemplazó el placeholder — carga la lección real
+  vía `useLesson`, aplica `canStartLesson` con las mismas reglas que la web, y solo tras esa guarda
+  monta el `sessionStore` y los ejercicios.
+- Drag & drop para word-bank/match-pairs descartado en este corte (ver decisión #4); si el smoke
+  manual revela que los taps se sienten peor que en la web, es candidato explícito de Fase 4C.
+- `tsc --noEmit` sigue reportando errores de tipos en `*.spec.tsx` de `apps/mobile` por falta de
+  tipos globales de Jest (deuda heredada de la 4A, `apps/mobile` sin script `build`/`typecheck` en
+  el pipeline de turbo — sin cambios en esta fase).
+- Smoke manual real en Expo Go/dispositivo pendiente a discreción del usuario (Task 8 de este plan
+  es solo documentación; el recorrido en vivo del reproductor queda fuera de este corte igual que
+  quedó parte del smoke de la 4A).
+
+### Números de la fase
+
+- `apps/mobile`: 14 test suites / 29 tests, todos PASS (incluye `sessionStore`, `useSpeech`,
+  `ImageSelectExercise`, `TranslateExercise`, `ListeningExercise`, `MatchPairsExercise`,
+  `CompletionScreen`, `LessonPlayerScreen`, más las suites heredadas de la 4A).
+- `pnpm test` (turbo, monorepo completo): 8/8 tareas exitosas según reportes de Tasks 1-7; web
+  14 archivos / 44 tests.
+- `pnpm lint` / `pnpm build`: verdes en todo el repo según reportes de cada tarea.
+
+---
+
+*Próxima entrada: smoke manual del reproductor en dispositivo real (a discreción del usuario),
+review final de rama + merge de Fase 4B a `master`, y luego Fase 5 (portugués e italiano +
+despliegue).*

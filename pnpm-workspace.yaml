@@ -15,6 +15,12 @@ allowBuilds:
 # apps/web, que sigue en React 18) resuelve los tipos de React contra la versión 19 hoisteada
 # y rompe el build de apps/web (TS2786 "cannot be used as a JSX component"). Le fuerza su
 # propia copia de @types/react en la línea 18.x.
+# Expo Go 57.0.2 embebe nativamente reanimated 4.5.0 / worklets 0.10.0 (ver
+# expo/bundledNativeModules.json); versiones JS más nuevas (4.5.1/0.10.2) rompen el ABI de
+# worklets y crashean Hermes con SIGSEGV al abrir la app en Expo Go.
+overrides:
+  react-native-reanimated: 4.5.0
+  react-native-worklets: 0.10.0
 packageExtensions:
   react-router-dom:
     dependencies:

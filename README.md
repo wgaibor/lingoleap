@@ -147,8 +147,9 @@ congelado → lint → build → tests. El badge de arriba refleja el estado de 
 - [ ] **Fase 3B** — Gemas, congeladores de racha, ligas semanales, logros *(logros, gemas,
       congelador comprable y liga semanal completos — falta el merge a master)*
 - [x] **Fase 4A** — Esqueleto de app móvil con Expo Router: auth, lista de cursos, camino de
-      lecciones con desbloqueo progresivo, `StatsBar` *(completa; el reproductor de lecciones
-      queda para la Fase 4B)*
+      lecciones con desbloqueo progresivo, `StatsBar` *(completa)*
+- [x] **Fase 4B** — Reproductor de lecciones móvil: 4 tipos de ejercicio, TTS con
+      `expo-speech`, guarda de corazones, guardado de progreso *(completa)*
 - [ ] **Fase 5** — Portugués e italiano (solo correr el pipeline) + despliegue
 
 ## Gamificación (Fase 3A)
@@ -205,12 +206,14 @@ un cron semanal (`LeagueSchedulerService`, lunes 00:05 UTC) y un disparador pere
 $0 de infraestructura, el proceso no está vivo 24/7. `closed_at` hace que ambos disparadores sean
 idempotentes entre sí.
 
-## App móvil (Fase 4A)
+## App móvil (Fase 4A + 4B)
 
 `apps/mobile` es un cliente Expo + Expo Router que reusa `packages/core` y
 `@lingoleap/api-client` tal cual la web: auth con Supabase, lista de cursos, camino de
-lecciones con desbloqueo progresivo y `StatsBar`. El reproductor de lecciones es un
-placeholder ("Próximamente") hasta la Fase 4B.
+lecciones con desbloqueo progresivo y `StatsBar`. El reproductor de lecciones ya no es un
+placeholder: implementa los 4 tipos de ejercicio (selección con imagen, traducir con banco de
+palabras, escucha, parejas), TTS con `expo-speech` (sin audio pregrabado, igual que la web),
+guarda de corazones al entrar y guardado de progreso/stats al completar.
 
 ```bash
 # apps/mobile/.env (ver apps/mobile/.env.example) — usar la IP LAN de la PC que corre la API,

@@ -8,3 +8,6 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 // estado en act() de forma síncrona y las queries de `screen` (RNTL) pueden no
 // ver el árbol recién montado o actualizado.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+// expo-speech toca APIs nativas que no existen en el entorno jsdom/node de jest.
+jest.mock('expo-speech', () => ({ speak: jest.fn(), stop: jest.fn() }));
